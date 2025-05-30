@@ -212,6 +212,8 @@ app.get('/api/process-message', (req, res) => {
 // Process message endpoint
 app.post('/api/process-message', async (req, res) => {
   console.log('🚀 POST /api/process-message endpoint hit!');
+  console.log('📝 Headers:', JSON.stringify(req.headers));
+  console.log('📝 Full Body:', JSON.stringify(req.body));
   try {
     console.log('📨 Received message processing request:', req.body);
     console.log('🔍 Request headers:', req.headers);
