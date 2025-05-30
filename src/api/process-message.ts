@@ -9,6 +9,8 @@ export interface ProcessMessageRequest {
   pageId: string;
   timestamp: number;
   imageUrl?: string;
+  senderType?: 'customer' | 'page';
+  isEcho?: boolean;
 }
 
 export interface ProcessMessageResponse {
@@ -22,13 +24,14 @@ export interface ProcessMessageResponse {
 export async function processIncomingMessage(
   request: ProcessMessageRequest
 ): Promise<ProcessMessageResponse> {
-  const { senderId, messageText, messageId, pageId, timestamp, imageUrl } = request;
+  const { senderId, messageText, messageId, pageId, timestamp, imageUrl, senderType = 'customer', isEcho = false } = request;
 
   try {
-    console.log(`Processing message from ${senderId}: "${messageText}"`);
+    const messageTypeLabel = senderType === 'page' ? 'page admin' : 'customer';
+    console.log(`Processing message from ${messageTypeLabel} ${senderId}: "${messageText}"`);
 
-    // الحصول على اسم المرسل (يمكن تحسينه لاحقاً)
-    const senderName = await getSenderName(senderId) || `User ${senderId}`;
+    // الحصول على اسم المرسل من Facebook API
+    const senderName = await getSenderName(senderId, pageId) || `User ${senderId}`;
 
     // إنشاء أو الحصول على المحادثة
     const conversationId = await AutoReplyService.getOrCreateConversation(
@@ -43,7 +46,7 @@ export async function processIncomingMessage(
 
     // حفظ الرسالة الواردة (تجاهل المكررة)
     try {
-      await saveIncomingMessage(conversationId, messageText, messageId, timestamp, imageUrl);
+      await saveIncomingMessage(conversationId, messageText, messageId, timestamp, imageUrl, senderType, pageId);
     } catch (error: any) {
       if (error.code === '23505') {
         console.log('⚠️ Duplicate message ignored:', messageId);
@@ -57,15 +60,23 @@ export async function processIncomingMessage(
       throw error;
     }
 
-    // معالجة الرد الآلي
-    const autoReplyWasSent = await AutoReplyService.processIncomingMessage(
-      senderId,
-      messageText,
-      conversationId
-    );
+    // معالجة الرد الآلي (فقط للرسائل من العملاء، ليس من الصفحة)
+    let autoReplyWasSent = false;
+    if (senderType === 'customer' && !isEcho) {
+      console.log('🚀 Starting auto reply processing...');
+      console.log('📝 Parameters:', { senderId, messageText, conversationId });
+      autoReplyWasSent = await AutoReplyService.processIncomingMessage(
+        senderId,
+        messageText,
+        conversationId
+      );
+      console.log('🤖 Auto reply result:', autoReplyWasSent);
+    } else {
+      console.log('📤 Message from page admin - no auto reply needed');
+    }
 
     // تحديث المحادثة
-    await updateConversation(conversationId, messageText);
+    await updateConversation(conversationId, messageText, senderType);
 
     return {
       success: true,
@@ -89,7 +100,9 @@ async function saveIncomingMessage(
   messageText: string,
   messageId?: string,
   timestamp?: number,
-  imageUrl?: string
+  imageUrl?: string,
+  senderType: 'customer' | 'page' = 'customer',
+  pageId?: string
 ): Promise<void> {
   try {
     // إذا كانت هناك صورة، أضفها للمحتوى
@@ -104,11 +117,13 @@ async function saveIncomingMessage(
       .insert({
         conversation_id: conversationId,
         content: content,
-        sender_type: 'customer',
+        sender_type: senderType === 'page' ? 'admin' : senderType, // تحويل 'page' إلى 'admin'
         facebook_message_id: messageId,
-        is_read: false,
+        is_read: senderType === 'page', // رسائل الصفحة تعتبر مقروءة تلقائياً
         is_auto_reply: false,
-        created_at: timestamp ? new Date(timestamp).toISOString() : new Date().toISOString()
+        image_url: imageUrl || '',
+        created_at: timestamp ? new Date(timestamp).toISOString() : new Date().toISOString(),
+        page_id: pageId || '' // إضافة حقل page_id المطلوب
       });
 
     if (error) {
@@ -116,7 +131,8 @@ async function saveIncomingMessage(
       throw error;
     }
 
-    console.log('✅ Incoming message saved to database');
+    const messageTypeLabel = senderType === 'page' ? 'page admin' : 'customer';
+    console.log(`✅ ${messageTypeLabel} message saved to database`);
   } catch (error) {
     console.error('Error in saveIncomingMessage:', error);
     throw error;
@@ -124,7 +140,7 @@ async function saveIncomingMessage(
 }
 
 // تحديث المحادثة
-async function updateConversation(conversationId: string, lastMessage: string): Promise<void> {
+async function updateConversation(conversationId: string, lastMessage: string, senderType: 'customer' | 'page' = 'customer'): Promise<void> {
   try {
     // أولاً، احصل على العدد الحالي للرسائل غير المقروءة
     const { data: conversation, error: fetchError } = await supabase
@@ -140,13 +156,16 @@ async function updateConversation(conversationId: string, lastMessage: string): 
 
     const currentUnreadCount = conversation?.unread_count || 0;
 
+    // زيادة عدد الرسائل غير المقروءة فقط للرسائل من العملاء
+    const newUnreadCount = senderType === 'customer' ? currentUnreadCount + 1 : currentUnreadCount;
+
     // تحديث المحادثة
     const { error: updateError } = await supabase
       .from('conversations')
       .update({
         last_message: lastMessage,
         last_message_at: new Date().toISOString(),
-        unread_count: currentUnreadCount + 1,
+        unread_count: newUnreadCount,
         updated_at: new Date().toISOString()
       })
       .eq('id', conversationId);
@@ -163,18 +182,66 @@ async function updateConversation(conversationId: string, lastMessage: string): 
   }
 }
 
-// الحصول على اسم المرسل (يمكن تطويره لاحقاً)
-async function getSenderName(senderId: string): Promise<string | null> {
+// الحصول على اسم المرسل من Facebook API وتحديث قاعدة البيانات
+async function getSenderName(senderId: string, pageId: string): Promise<string | null> {
   try {
-    // يمكن إضافة استدعاء Facebook API هنا للحصول على اسم المستخدم
-    // const facebookService = new FacebookApiService(accessToken);
-    // const userInfo = await facebookService.getUserInfo(senderId);
-    // return userInfo.name;
+    const { FacebookApiService } = await import('../services/facebookApi');
+    const pageSettings = await FacebookApiService.getPageSettings(pageId);
 
-    return null; // مؤقتاً
+    if (pageSettings && pageSettings.access_token) {
+      const facebookService = new FacebookApiService(pageSettings.access_token);
+      const userInfo = await facebookService.getUserInfo(senderId, pageSettings.access_token);
+
+      if (userInfo && userInfo.name) {
+        console.log(`✅ Got real user name: ${userInfo.name} for ID: ${senderId}`);
+
+        // تحديث الاسم في قاعدة البيانات فوراً إذا كان مختلف
+        await updateUserNameInDatabase(senderId, userInfo.name);
+
+        return userInfo.name;
+      }
+    }
+
+    return null;
   } catch (error) {
     console.error('Error getting sender name:', error);
     return null;
+  }
+}
+
+// تحديث اسم المستخدم في قاعدة البيانات
+async function updateUserNameInDatabase(customerFacebookId: string, realName: string): Promise<void> {
+  try {
+    // البحث عن المحادثة الموجودة
+    const { data: conversation, error: fetchError } = await supabase
+      .from('conversations')
+      .select('id, customer_name')
+      .eq('customer_facebook_id', customerFacebookId)
+      .single();
+
+    if (fetchError) {
+      console.log(`⚠️ No existing conversation found for ${customerFacebookId}`);
+      return;
+    }
+
+    // تحديث الاسم إذا كان مختلف
+    if (conversation.customer_name !== realName) {
+      const { error: updateError } = await supabase
+        .from('conversations')
+        .update({
+          customer_name: realName,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', conversation.id);
+
+      if (updateError) {
+        console.error(`❌ Error updating user name for ${customerFacebookId}:`, updateError);
+      } else {
+        console.log(`🔄 Updated user name: ${conversation.customer_name} → ${realName}`);
+      }
+    }
+  } catch (error) {
+    console.error('Error updating user name in database:', error);
   }
 }
 

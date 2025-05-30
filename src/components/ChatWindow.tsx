@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Send, User, Bot, MoreVertical, Phone, Video, Loader2, ImagePlus } from "lucide-react";
+import { Send, User, Bot, MoreVertical, Phone, Video, Loader2, ImagePlus, CheckCircle, AlertCircle, MessageSquare } from "lucide-react";
 import { useMessages } from "@/hooks/useMessages";
 import { useConversations } from "@/hooks/useConversations";
 import { GeminiTestButton } from "@/components/GeminiTestButton";
@@ -22,15 +22,26 @@ const ChatWindow = ({ conversationId }: ChatWindowProps) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const conversation = conversations.find(c => c.id === conversationId) ||
-    (conversationId.startsWith('test-') ? {
+  // تشخيص: طباعة معرف المحادثة والرسائل
+  console.log('🔍 [ChatWindow] Conversation ID:', conversationId);
+  console.log('🔍 [ChatWindow] Messages count:', messages?.length || 0);
+  console.log('🔍 [ChatWindow] Messages:', messages);
+  console.log('🔍 [ChatWindow] Loading:', isLoading);
+  console.log('🔍 [ChatWindow] Error:', error);
+
+  const conversation = conversations.find(c => c && c.id === conversationId) ||
+    (conversationId && conversationId.startsWith('test-') ? {
       id: conversationId,
       customer_name: `مستخدم تجريبي ${conversationId.split('-')[1]}`,
       customer_facebook_id: 'test-user',
+      facebook_page_id: '240244019177739',
       is_online: true,
       last_message: 'رسالة تجريبية',
       last_message_at: new Date().toISOString(),
-      unread_count: 0
+      unread_count: 0,
+      page_name: 'صفحة تجريبية',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     } : null);
 
   const scrollToBottom = () => {
@@ -93,6 +104,16 @@ const ChatWindow = ({ conversationId }: ChatWindowProps) => {
     });
   };
 
+  // فحص إذا كان النص عبارة عن رابط صورة طويل
+  const isImageUrl = (text: string) => {
+    if (!text) return false;
+    return text.startsWith('https://scontent.xx.fbcdn.net') ||
+           text.startsWith('https://scontent-') ||
+           (text.startsWith('https://') && text.includes('fbcdn.net')) ||
+           text.includes('fbcdn.net') ||
+           (text.startsWith('https://') && text.length > 100); // أي رابط طويل
+  };
+
   if (error) {
     return (
       <Card className="h-full flex flex-col">
@@ -133,10 +154,36 @@ const ChatWindow = ({ conversationId }: ChatWindowProps) => {
               )}
             </div>
             <div>
-              <h3 className="font-medium text-gray-900">{conversation.customer_name}</h3>
-              <p className="text-sm text-green-600">
-                {conversation.is_online ? "متصل الآن" : "غير متصل"}
-              </p>
+              <h3 className="font-medium text-gray-900">
+                {conversation.customer_name.startsWith('User ')
+                  ? `عميل ${conversation.customer_facebook_id.slice(-6)}`
+                  : conversation.customer_name}
+              </h3>
+              <div className="flex flex-col space-y-1">
+                <p className="text-sm text-green-600">
+                  {conversation.is_online ? "متصل الآن" : "غير متصل"}
+                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs text-blue-600 flex items-center">
+                    📄 {conversation.page_name ||
+                        (conversation.facebook_page_id === '260345600493273' ? 'Swan shop' :
+                         conversation.facebook_page_id === '240244019177739' ? 'سولا 127' :
+                         'صفحة غير معروفة')}
+                  </p>
+                  {/* عرض حالة المحادثة البسيطة */}
+                  {conversation.unread_count > 0 ? (
+                    <Badge variant="secondary" className="text-xs bg-red-500 text-white">
+                      <AlertCircle className="w-3 h-3 ml-1" />
+                      {conversation.unread_count} غير مقروء
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-xs bg-green-500 text-white">
+                      <CheckCircle className="w-3 h-3 ml-1" />
+                      تم الرد على الكل
+                    </Badge>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -163,42 +210,67 @@ const ChatWindow = ({ conversationId }: ChatWindowProps) => {
           </div>
         ) : messages.length === 0 ? (
           <div className="flex items-center justify-center p-8 text-gray-500">
-            <p>لا توجد رسائل في هذه المحادثة</p>
+            <div className="text-center">
+              <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
+              <p>لا توجد رسائل في هذه المحادثة</p>
+              <div className="text-xs text-gray-400 mt-2 space-y-1">
+                <div>معرف المحادثة: {conversationId}</div>
+                <div>عدد الرسائل غير المقروءة: {conversation.unread_count}</div>
+                <div>تحقق من الـ Console للمزيد من التفاصيل</div>
+              </div>
+            </div>
           </div>
         ) : (
           <>
-            {/* إضافة رسائل تجريبية للاختبار */}
-            {(messages.length === 0 || conversationId.startsWith('test-')) && (
+            {/* إضافة رسائل تجريبية للاختبار فقط للمحادثات التجريبية */}
+            {conversationId.startsWith('test-') && (
               <>
-                {Array.from({ length: 20 }, (_, i) => (
-                  <div
-                    key={`test-msg-${i}`}
-                    className={`flex ${
-                      i % 2 === 0 ? 'justify-start' : 'justify-end'
-                    }`}
-                  >
-                    <div
-                      className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                        i % 2 === 0
-                          ? 'bg-gray-100 text-gray-900'
-                          : 'bg-green-500 text-white'
-                      }`}
-                    >
-                      <p className="text-sm leading-relaxed">
-                        رسالة تجريبية رقم {i + 1} - هذا نص تجريبي لاختبار التمرير في نافذة الدردشة
-                      </p>
-                      <div className="flex items-center justify-between mt-2">
-                        <span className="text-xs opacity-70">
-                          {new Date().toLocaleTimeString('ar', {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            hour12: false
-                          })}
-                        </span>
-                      </div>
+                {/* رسالة نصية عادية */}
+                <div className="flex justify-start">
+                  <div className="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-gray-100 text-gray-900">
+                    <p className="text-sm leading-relaxed">مرحبا، أريد الاستفسار عن المنتجات المتاحة</p>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-xs opacity-70">18:25</span>
                     </div>
                   </div>
-                ))}
+                </div>
+
+                {/* رسالة مع صورة - بدون عرض الرابط */}
+                <div className="flex justify-start">
+                  <div className="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-gray-100 text-gray-900">
+                    <div className="space-y-2">
+                      <img
+                        src="https://scontent.xx.fbcdn.net/v/t1.15752-9/494575858_1163162992491513_3678752218676932658_n.jpg?_nc_cat=105&ccb=1-7&_nc_sid=9f807c&_nc_ohc=3Fm2kReTgQYXNwrYVOYg&_nc_oc=Adr7gBNfBeAm9LjcsHj-RtO2nrsfxw55KHNvmyg7fs1WPeGSTSPKvpNVFZKnlrbNb&_nc_ad=z-m&_nc_cid=0&_nc_ht=scontent.xx&oh=03_Q7cD2GGtd0_RspXo2A7K53QGArksfyFXfQ3gCS-fmyj8EMJoGw&oe=68615EE"
+                        alt="صورة"
+                        className="max-w-48 max-h-48 rounded border object-cover cursor-pointer"
+                        onClick={() => window.open("https://scontent.xx.fbcdn.net/v/t1.15752-9/494575858_1163162992491513_3678752218676932658_n.jpg?_nc_cat=105&ccb=1-7&_nc_sid=9f807c&_nc_ohc=3Fm2kReTgQYXNwrYVOYg&_nc_oc=Adr7gBNfBeAm9LjcsHj-RtO2nrsfxw55KHNvmyg7fs1WPeGSTSPKvpNVFZKnlrbNb&_nc_ad=z-m&_nc_cid=0&_nc_ht=scontent.xx&oh=03_Q7cD2GGtd0_RspXo2A7K53QGArksfyFXfQ3gCS-fmyj8EMJoGw&oe=68615EE", '_blank')}
+                      />
+                      <p className="text-sm leading-relaxed opacity-70">📷 صورة</p>
+                    </div>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-xs opacity-70">18:26</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* رسالة رد آلي */}
+                <div className="flex justify-end">
+                  <div className="max-w-xs lg:max-w-md px-4 py-2 rounded-lg bg-blue-500 text-white">
+                    <p className="text-sm leading-relaxed">
+                      🎯 مساء الخير ⚽ Omar Elnaghry
+                      من المنتجات اللي معنا دلوقتي للعيد 🎁🎁
+                      أحوال تختلف القلب 😍 نادر عرض ال 3 قطع إنتاج إيطالي وياباني على
+                      باقي الألوان واطلبي دلوقتي 💗
+                    </p>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="text-xs opacity-70">18:26</span>
+                      <Badge variant="secondary" className="text-xs bg-white bg-opacity-20">
+                        <Bot className="w-3 h-3 ml-1" />
+                        رد آلي
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
               </>
             )}
             {messages.map((msg) => (
@@ -220,28 +292,41 @@ const ChatWindow = ({ conversationId }: ChatWindowProps) => {
                   {/* عرض المحتوى مع معالجة الصور */}
                   <div className="space-y-2">
                     {/* عرض الصورة إذا كانت موجودة */}
-                    {msg.image_url && (
+                    {msg.image_url && msg.image_url !== 'image_sent' && (
                       <img
                         src={msg.image_url}
                         alt="صورة"
                         className="max-w-48 max-h-48 rounded border object-cover cursor-pointer"
                         onClick={() => window.open(msg.image_url!, '_blank')}
+                        onError={(e) => {
+                          console.error('Error loading image:', msg.image_url);
+                          // إخفاء الصورة إذا فشل تحميلها
+                          (e.target as HTMLImageElement).style.display = 'none';
+                        }}
                       />
                     )}
 
-                    {/* عرض النص */}
-                    {msg.content && (
+                    {/* عرض النص - إخفاء الروابط الطويلة للصور */}
+                    {msg.content && !isImageUrl(msg.content) && (
                       <p className="text-sm leading-relaxed">{msg.content}</p>
                     )}
-                  </div>
-                  <div className="flex items-center justify-between mt-2">
-                    <span className="text-xs opacity-70">{formatTimestamp(msg.created_at)}</span>
-                    {msg.sender_type === 'bot' && msg.is_auto_reply && (
-                      <Badge variant="secondary" className="text-xs bg-white bg-opacity-20">
-                        <Bot className="w-3 h-3 ml-1" />
-                        {msg.is_ai_generated ? 'Gemini AI' : 'رد آلي'}
-                      </Badge>
+
+                    {/* عرض نص بديل للصور بدون محتوى نصي أو مع رابط صورة فقط */}
+                    {msg.image_url && (!msg.content || isImageUrl(msg.content)) && (
+                      <p className="text-sm leading-relaxed opacity-70">📷 صورة</p>
                     )}
+                  </div>
+                  <div className="flex items-center justify-between mt-2 flex-wrap gap-1">
+                    <span className="text-xs opacity-70">{formatTimestamp(msg.created_at)}</span>
+                    <div className="flex items-center gap-1">
+                      {/* عرض badge نوع الرسالة فقط للبوت */}
+                      {msg.sender_type === 'bot' && msg.is_auto_reply && (
+                        <Badge variant="secondary" className="text-xs bg-white bg-opacity-20">
+                          <Bot className="w-3 h-3 ml-1" />
+                          {msg.is_ai_generated ? 'Gemini AI' : 'رد آلي'}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

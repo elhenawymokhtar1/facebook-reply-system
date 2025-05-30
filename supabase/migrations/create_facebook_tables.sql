@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     last_message_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     is_online BOOLEAN DEFAULT false,
     unread_count INTEGER DEFAULT 0,
+    conversation_status TEXT DEFAULT 'active' CHECK (conversation_status IN ('active', 'pending', 'resolved', 'spam', 'archived')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(customer_facebook_id, page_id),
@@ -75,6 +76,9 @@ CREATE TABLE IF NOT EXISTS messages (
     image_url TEXT,
     is_auto_reply BOOLEAN DEFAULT false,
     is_ai_generated BOOLEAN DEFAULT false,
+    is_read BOOLEAN DEFAULT false,
+    facebook_message_id TEXT,
+    message_status TEXT DEFAULT 'pending' CHECK (message_status IN ('pending', 'answered', 'unanswered', 'spam', 'archived')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE,
     FOREIGN KEY (page_id) REFERENCES facebook_settings(page_id) ON DELETE CASCADE

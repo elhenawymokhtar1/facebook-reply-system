@@ -68,6 +68,7 @@ export type Database = {
       }
       conversations: {
         Row: {
+          conversation_status: string | null
           created_at: string
           customer_facebook_id: string
           customer_name: string
@@ -76,10 +77,12 @@ export type Database = {
           is_online: boolean | null
           last_message: string | null
           last_message_at: string | null
+          page_id: string
           unread_count: number | null
           updated_at: string
         }
         Insert: {
+          conversation_status?: string | null
           created_at?: string
           customer_facebook_id: string
           customer_name: string
@@ -88,10 +91,12 @@ export type Database = {
           is_online?: boolean | null
           last_message?: string | null
           last_message_at?: string | null
+          page_id: string
           unread_count?: number | null
           updated_at?: string
         }
         Update: {
+          conversation_status?: string | null
           created_at?: string
           customer_facebook_id?: string
           customer_name?: string
@@ -100,6 +105,7 @@ export type Database = {
           is_online?: boolean | null
           last_message?: string | null
           last_message_at?: string | null
+          page_id?: string
           unread_count?: number | null
           updated_at?: string
         }
@@ -112,8 +118,12 @@ export type Database = {
           created_at: string
           facebook_message_id: string | null
           id: string
+          image_url: string | null
+          is_ai_generated: boolean | null
           is_auto_reply: boolean | null
           is_read: boolean | null
+          message_status: string | null
+          page_id: string
           sender_type: string
         }
         Insert: {
@@ -122,8 +132,12 @@ export type Database = {
           created_at?: string
           facebook_message_id?: string | null
           id?: string
+          image_url?: string | null
+          is_ai_generated?: boolean | null
           is_auto_reply?: boolean | null
           is_read?: boolean | null
+          message_status?: string | null
+          page_id: string
           sender_type: string
         }
         Update: {
@@ -132,8 +146,12 @@ export type Database = {
           created_at?: string
           facebook_message_id?: string | null
           id?: string
+          image_url?: string | null
+          is_ai_generated?: boolean | null
           is_auto_reply?: boolean | null
           is_read?: boolean | null
+          message_status?: string | null
+          page_id?: string
           sender_type?: string
         }
         Relationships: [

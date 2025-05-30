@@ -15,6 +15,12 @@ export const useFacebookApi = () => {
     queryFn: FacebookApiService.getFacebookSettings,
   });
 
+  // تحميل جميع الصفحات المربوطة
+  const { data: connectedPages = [], isLoading: isLoadingConnectedPages } = useQuery({
+    queryKey: ['connected-pages'],
+    queryFn: FacebookApiService.getAllConnectedPages,
+  });
+
   useEffect(() => {
     if (savedSettings) {
       setAccessToken(savedSettings.access_token);
@@ -46,6 +52,7 @@ export const useFacebookApi = () => {
     onSuccess: (data) => {
       setIsConnected(true);
       queryClient.invalidateQueries({ queryKey: ['facebook-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['connected-pages'] });
       toast({
         title: "تم ربط الصفحة بنجاح",
         description: `تم ربط صفحة ${data.pageName} بنجاح`,
@@ -168,6 +175,8 @@ export const useFacebookApi = () => {
     pages,
     isLoadingPages,
     pagesError,
+    connectedPages,
+    isLoadingConnectedPages,
 
     // العمليات
     setAccessToken,

@@ -85,5 +85,20 @@
       "الاسود"
     ],
     "is_active": true
+  },
+  {
+    "id": "7",
+    "color_key": "black",
+    "arabic_name": "????",
+    "english_name": "Black",
+    "image_url": "https://files.easy-orders.net/1739181890281568922.jpg",
+    "keywords": [
+      "????",
+      "????",
+      "??????",
+      "??????",
+      "black"
+    ],
+    "is_active": true
   }
 ]

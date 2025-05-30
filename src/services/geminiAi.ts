@@ -210,15 +210,41 @@ export class GeminiAiService {
   // حفظ إعدادات Gemini في قاعدة البيانات
   static async saveGeminiSettings(settings: Partial<GeminiSettings>): Promise<void> {
     try {
-      const { error } = await supabase
+      // أولاً: محاولة الحصول على السجل الموجود
+      const { data: existingSettings } = await supabase
         .from('gemini_settings')
-        .upsert({
-          ...settings,
-          updated_at: new Date().toISOString()
-        });
+        .select('id')
+        .order('updated_at', { ascending: false })
+        .limit(1)
+        .single();
 
-      if (error) {
-        throw error;
+      if (existingSettings) {
+        // تحديث السجل الموجود
+        const { error } = await supabase
+          .from('gemini_settings')
+          .update({
+            ...settings,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingSettings.id);
+
+        if (error) {
+          throw error;
+        }
+        console.log('✅ Gemini settings updated successfully');
+      } else {
+        // إنشاء سجل جديد
+        const { error } = await supabase
+          .from('gemini_settings')
+          .insert({
+            ...settings,
+            updated_at: new Date().toISOString()
+          });
+
+        if (error) {
+          throw error;
+        }
+        console.log('✅ Gemini settings created successfully');
       }
     } catch (error) {
       console.error('Error saving Gemini settings:', error);
@@ -262,17 +288,16 @@ export class GeminiAiService {
       // إنشاء instance من الخدمة
       const geminiService = new GeminiAiService(settings);
 
-      // الحصول على تاريخ المحادثة (آخر 5 رسائل)
-      const { data: recentMessages } = await supabase
-        .from('messages')
-        .select('content, sender_type')
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: false })
-        .limit(5);
+      // 🧠 نظام سياق ذكي محسن
+      const contextData = await this.buildEnhancedContext(conversationId, userMessage);
 
-      const conversationHistory = recentMessages
-        ?.reverse()
-        .map(msg => `${msg.sender_type === 'customer' ? 'العميل' : 'المتجر'}: ${msg.content}`) || [];
+      let conversationHistory = contextData.recentMessages;
+
+      // إضافة السياق المحسن
+      if (contextData.contextSummary) {
+        conversationHistory.unshift(contextData.contextSummary);
+        console.log('🧠 Enhanced context added:', contextData.contextSummary);
+      }
 
       // إنتاج الرد
       console.log('🚀 Calling Gemini generateResponse...');
@@ -287,14 +312,69 @@ export class GeminiAiService {
       // تحليل المحادثة للبحث عن طلب محتمل
       await this.checkAndCreateOrder(conversationId, userMessage);
 
-      // إرسال الرد عبر Facebook
+      // إرسال الرد عبر Facebook - الحصول على إعدادات الصفحة الصحيحة
       console.log('🔍 About to get Facebook settings...');
-      const { data: facebookSettings } = await supabase
-        .from('facebook_settings')
-        .select('access_token')
+
+      // الحصول على customer_id من المحادثة
+      const { data: conversation } = await supabase
+        .from('conversations')
+        .select('customer_facebook_id')
+        .eq('id', conversationId)
         .single();
 
+      let facebookSettings = null;
+
+      // الحصول على إعدادات الصفحة الصحيحة بناءً على المحادثة
+      console.log('🔍 Getting correct page settings for conversation...');
+      const { FacebookApiService } = await import('./facebookApi');
+
+      // أولاً: محاولة الحصول على page_id من المحادثة
+      const { data: conversationData } = await supabase
+        .from('conversations')
+        .select('facebook_page_id')
+        .eq('id', conversationId)
+        .single();
+
+      if (conversationData?.facebook_page_id) {
+        console.log('🔍 Found page_id from conversation:', conversationData.facebook_page_id);
+        facebookSettings = await FacebookApiService.getPageSettings(conversationData.facebook_page_id);
+      }
+
+      // إذا لم نجد إعدادات، جرب كل الصفحات المتاحة
+      if (!facebookSettings) {
+        console.log('🔍 Trying all available pages...');
+        const { data: allPages } = await supabase
+          .from('facebook_pages')
+          .select('*')
+          .eq('is_active', true);
+
+        if (allPages && allPages.length > 0) {
+          // جرب كل صفحة حتى نجد واحدة تعمل
+          for (const page of allPages) {
+            try {
+              console.log(`🔍 Trying page: ${page.page_name} (${page.page_id})`);
+              facebookSettings = await FacebookApiService.getPageSettings(page.page_id);
+              if (facebookSettings) {
+                console.log(`✅ Found working page: ${page.page_name}`);
+                break;
+              }
+            } catch (error) {
+              console.log(`❌ Page ${page.page_name} failed:`, error);
+              continue;
+            }
+          }
+        }
+      }
+
       console.log('🔍 Facebook settings result:', !!facebookSettings);
+      if (facebookSettings) {
+        console.log('🔍 Page settings details:', {
+          page_id: facebookSettings.page_id,
+          page_name: facebookSettings.page_name,
+          tokenPrefix: facebookSettings.access_token ? facebookSettings.access_token.substring(0, 10) + '...' : 'null'
+        });
+      }
+
       if (facebookSettings) {
         console.log('🔍 Facebook settings found, proceeding...');
         const { FacebookApiService } = await import('./facebookApi');
@@ -342,14 +422,54 @@ export class GeminiAiService {
           console.log('💬 Text-only response, no image needed');
         }
 
-        // تنظيف النص من placeholder texts
-        let cleanResponse = geminiResponse.response
+        // 🧹 تنظيف شامل ومتقدم للنص من التعليمات التقنية
+        let cleanResponse = geminiResponse.response;
+
+        console.log('🔍 Original response before cleaning:', cleanResponse);
+
+        // إزالة كل شيء بعد أول نص تقني
+        cleanResponse = cleanResponse
+          // إزالة كل شيء بعد أول تعليمة تقنية
+          .replace(/\([^)]*هتبعث[\s\S]*/gi, '')
+          .replace(/\([^)]*هتبعتي[\s\S]*/gi, '')
+
+          // إزالة النصوص التقنية بين الأقواس
+          .replace(/\*\*\([^)]*هتبعث[\s\S]*/gi, '')
+          .replace(/\*\*\([^)]*هتبعتي[\s\S]*/gi, '')
+
+          // إزالة كل شيء بعد "مثال على التعليق"
+          .replace(/مثال على التعليق[\s\S]*/gi, '')
+
+          // إزالة كل شيء بعد "بعد إرسال كل الصور"
+          .replace(/بعد إرسال كل الصور[\s\S]*/gi, '')
+
+          // إزالة التعليمات المفصلة للصور
+          .replace(/\* \*\*صورة[\s\S]*/gi, '')
+          .replace(/\*\*صورة[\s\S]*/gi, '')
+
+          // إزالة النصوص بين الأقواس المربعة
           .replace(/\[هنا[^\]]*\]/gi, '')
           .replace(/\[يجب[^\]]*\]/gi, '')
           .replace(/\[إرفاق[^\]]*\]/gi, '')
           .replace(/\[ضعي[^\]]*\]/gi, '')
           .replace(/\[أضف[^\]]*\]/gi, '')
+
+          // تنظيف الأسطر الفارغة المتعددة
+          .replace(/\n\s*\n\s*\n/g, '\n\n')
+          .replace(/\n{3,}/g, '\n\n')
           .trim();
+
+        // إذا كان النص لسه طويل، اقطعه عند أول جملة كاملة
+        if (cleanResponse.length > 200) {
+          // البحث عن أول جملة كاملة تنتهي بعلامة استفهام أو تعجب أو نقطة
+          const sentences = cleanResponse.split(/[.!؟😉😍🥰💖✨🔥💙🖤🤍]/);
+          if (sentences.length > 1) {
+            // أخذ أول جملة أو جملتين
+            cleanResponse = sentences.slice(0, 2).join('') + ' 😍';
+          }
+        }
+
+        console.log('🧹 Cleaned response:', cleanResponse);
 
         // إرسال النص المنظف
         if (cleanResponse) {
@@ -361,7 +481,7 @@ export class GeminiAiService {
         }
 
         // حفظ الرد في قاعدة البيانات
-        const mainImageUrl = imageSent ? 'image_sent' : null;
+        // لا نحفظ image_url هنا لأن الصور بتتحفظ منفصلة في detectAndSendImage
         const textContent = cleanResponse;
 
         await supabase
@@ -373,7 +493,7 @@ export class GeminiAiService {
             is_read: true,
             is_auto_reply: true,
             is_ai_generated: true,
-            image_url: mainImageUrl
+            image_url: null // الصور بتتحفظ منفصلة
           });
 
         console.log('✅ Gemini AI response sent successfully');
@@ -525,26 +645,53 @@ export class GeminiAiService {
         });
 
       // إرسال الرسالة عبر Facebook
-      const { data: facebookSettings } = await supabase
-        .from('facebook_settings')
-        .select('access_token')
+      const { data: conversation } = await supabase
+        .from('conversations')
+        .select('customer_facebook_id')
+        .eq('id', conversationId)
         .single();
 
-      if (facebookSettings) {
-        // الحصول على sender_id من المحادثة
-        const { data: conversation } = await supabase
+      if (conversation) {
+        // الحصول على إعدادات الصفحة الصحيحة
+        const { FacebookApiService } = await import('./facebookApi');
+        let facebookSettings = null;
+
+        // محاولة الحصول على page_id من المحادثة
+        const { data: conversationData } = await supabase
           .from('conversations')
-          .select('customer_id')
+          .select('facebook_page_id')
           .eq('id', conversationId)
           .single();
 
-        if (conversation) {
-          const { FacebookApiService } = await import('./facebookApi');
+        if (conversationData?.facebook_page_id) {
+          facebookSettings = await FacebookApiService.getPageSettings(conversationData.facebook_page_id);
+        }
+
+        // إذا لم نجد إعدادات، جرب كل الصفحات المتاحة
+        if (!facebookSettings) {
+          const { data: allPages } = await supabase
+            .from('facebook_pages')
+            .select('*')
+            .eq('is_active', true);
+
+          if (allPages && allPages.length > 0) {
+            for (const page of allPages) {
+              try {
+                facebookSettings = await FacebookApiService.getPageSettings(page.page_id);
+                if (facebookSettings) break;
+              } catch (error) {
+                continue;
+              }
+            }
+          }
+        }
+
+        if (facebookSettings) {
           const facebookService = new FacebookApiService(facebookSettings.access_token);
 
           await facebookService.sendMessage(
             facebookSettings.access_token,
-            conversation.customer_id,
+            conversation.customer_facebook_id,
             confirmationMessage
           );
 
@@ -629,25 +776,23 @@ export class GeminiAiService {
         });
 
       // إرسال عبر Facebook
-      const { data: facebookSettings } = await supabase
-        .from('facebook_settings')
-        .select('access_token')
+      const { data: conversation } = await supabase
+        .from('conversations')
+        .select('customer_facebook_id')
+        .eq('id', conversationId)
         .single();
 
-      if (facebookSettings) {
-        const { data: conversation } = await supabase
-          .from('conversations')
-          .select('customer_id')
-          .eq('id', conversationId)
-          .single();
+      if (conversation) {
+        // الحصول على إعدادات الصفحة الصحيحة
+        const { FacebookApiService } = await import('./facebookApi');
+        let facebookSettings = await this.getCorrectPageSettings(conversationId);
 
-        if (conversation) {
-          const { FacebookApiService } = await import('./facebookApi');
+        if (facebookSettings) {
           const facebookService = new FacebookApiService(facebookSettings.access_token);
 
           await facebookService.sendMessage(
             facebookSettings.access_token,
-            conversation.customer_id,
+            conversation.customer_facebook_id,
             message
           );
 
@@ -663,32 +808,32 @@ export class GeminiAiService {
   static async sendImageToCustomer(conversationId: string, message: string, imageUrl: string): Promise<void> {
     console.log('🖼️ sendImageToCustomer called with:', { conversationId, imageUrl });
     try {
-      // حفظ الرسالة في قاعدة البيانات
+      // حفظ الرسالة في قاعدة البيانات مع رابط الصورة الصحيح
       await supabase
         .from('messages')
         .insert({
           conversation_id: conversationId,
-          content: `${message}\n[صورة: ${imageUrl}]`,
+          content: message,
           sender_type: 'bot',
           is_read: true,
           is_auto_reply: true,
-          is_ai_generated: false
+          is_ai_generated: false,
+          image_url: imageUrl // حفظ رابط الصورة الفعلي
         });
 
       // إرسال عبر Facebook
-      const { data: facebookSettings } = await supabase
-        .from('facebook_settings')
-        .select('access_token')
+      const { data: conversation } = await supabase
+        .from('conversations')
+        .select('customer_facebook_id')
+        .eq('id', conversationId)
         .single();
 
-      if (facebookSettings) {
-        const { data: conversation } = await supabase
-          .from('conversations')
-          .select('customer_id')
-          .eq('id', conversationId)
-          .single();
+      if (conversation) {
+        // الحصول على إعدادات الصفحة الصحيحة
+        const { FacebookApiService } = await import('./facebookApi');
+        let facebookSettings = await this.getCorrectPageSettings(conversationId);
 
-        if (conversation) {
+        if (facebookSettings) {
           const { FacebookApiService } = await import('./facebookApi');
           const facebookService = new FacebookApiService(facebookSettings.access_token);
 
@@ -708,7 +853,7 @@ export class GeminiAiService {
             // إرسال الرسالة النصية بعد الصورة
             await facebookService.sendMessage(
               facebookSettings.access_token,
-              conversation.customer_id,
+              conversation.customer_facebook_id,
               message
             );
 
@@ -727,7 +872,7 @@ ${fullImageUrl}
 
             await facebookService.sendMessage(
               facebookSettings.access_token,
-              conversation.customer_id,
+              conversation.customer_facebook_id,
               messageWithImage
             );
 
@@ -740,21 +885,168 @@ ${fullImageUrl}
     }
   }
 
-  // نظام موحد لاستخراج اللون مع ذاكرة السياق
+  // 🧠 بناء سياق محسن للمحادثة
+  static async buildEnhancedContext(conversationId: string, currentMessage: string) {
+    try {
+      // الحصول على المزيد من الرسائل (10 بدلاً من 5)
+      const { data: recentMessages } = await supabase
+        .from('messages')
+        .select('content, sender_type, created_at')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      const formattedMessages = recentMessages
+        ?.reverse()
+        .map(msg => `${msg.sender_type === 'customer' ? 'العميل' : 'المتجر'}: ${msg.content}`) || [];
+
+      // تحليل معلومات العميل
+      const customerInfo = await OrderService.analyzeConversationForOrder(conversationId);
+
+      // تحليل حالة المحادثة
+      const conversationState = this.analyzeConversationState(recentMessages, currentMessage);
+
+      // تحليل اهتمامات العميل
+      const customerInterests = this.analyzeCustomerInterests(recentMessages);
+
+      // بناء ملخص السياق الذكي
+      const contextParts = [];
+
+      // معلومات العميل
+      if (customerInfo) {
+        const infoSummary = [];
+        if (customerInfo.name) infoSummary.push(`الاسم: ${customerInfo.name}`);
+        if (customerInfo.phone) infoSummary.push(`الهاتف: ${customerInfo.phone}`);
+        if (customerInfo.address) infoSummary.push(`العنوان: ${customerInfo.address}`);
+        if (customerInfo.size) infoSummary.push(`المقاس: ${customerInfo.size}`);
+        if (customerInfo.color) infoSummary.push(`اللون المطلوب: ${customerInfo.color}`);
+
+        if (infoSummary.length > 0) {
+          contextParts.push(`معلومات العميل: ${infoSummary.join(', ')}`);
+        }
+      }
+
+      // حالة المحادثة
+      if (conversationState.mood !== 'neutral') {
+        contextParts.push(`مزاج العميل: ${conversationState.mood}`);
+      }
+
+      if (conversationState.stage !== 'unknown') {
+        contextParts.push(`مرحلة المحادثة: ${conversationState.stage}`);
+      }
+
+      // اهتمامات العميل
+      if (customerInterests.preferredColors.length > 0) {
+        contextParts.push(`الألوان المفضلة: ${customerInterests.preferredColors.join(', ')}`);
+      }
+
+      if (customerInterests.inquiredProducts.length > 0) {
+        contextParts.push(`المنتجات المستفسر عنها: ${customerInterests.inquiredProducts.join(', ')}`);
+      }
+
+      // تحذيرات خاصة
+      if (conversationState.warnings.length > 0) {
+        contextParts.push(`تحذيرات: ${conversationState.warnings.join(', ')}`);
+      }
+
+      const contextSummary = contextParts.length > 0
+        ? `🧠 سياق المحادثة: ${contextParts.join(' | ')}`
+        : null;
+
+      return {
+        recentMessages: formattedMessages,
+        contextSummary,
+        conversationState,
+        customerInterests,
+        customerInfo
+      };
+
+    } catch (error) {
+      console.error('Error building enhanced context:', error);
+      return {
+        recentMessages: [],
+        contextSummary: null,
+        conversationState: { mood: 'neutral', stage: 'unknown', warnings: [] },
+        customerInterests: { preferredColors: [], inquiredProducts: [] },
+        customerInfo: null
+      };
+    }
+  }
+
+  // تحليل حالة المحادثة
+  static analyzeConversationState(messages: any[], currentMessage: string) {
+    const allText = messages?.map(m => m.content).join(' ') + ' ' + currentMessage;
+
+    // تحليل المزاج
+    let mood = 'neutral';
+    if (allText.includes('زعلان') || allText.includes('زفت') || allText.includes('مش عايز') || allText.includes('مش كويس')) {
+      mood = 'upset';
+    } else if (allText.includes('حلو') || allText.includes('جميل') || allText.includes('عجبني') || allText.includes('ممتاز')) {
+      mood = 'happy';
+    } else if (allText.includes('مش متأكد') || allText.includes('مش عارف') || allText.includes('ممكن')) {
+      mood = 'uncertain';
+    }
+
+    // تحليل مرحلة المحادثة
+    let stage = 'unknown';
+    if (allText.includes('عايز اشتري') || allText.includes('عايز اطلب') || allText.includes('هاخد')) {
+      stage = 'ready_to_buy';
+    } else if (allText.includes('عايز اشوف') || allText.includes('ممكن اشوف') || allText.includes('ابعتي')) {
+      stage = 'browsing';
+    } else if (allText.includes('اسم') && allText.includes('عنوان') && allText.includes('تليفون')) {
+      stage = 'providing_info';
+    } else if (allText.includes('تأكيد') || allText.includes('موافق') || allText.includes('اه كده')) {
+      stage = 'confirming';
+    }
+
+    // تحذيرات
+    const warnings = [];
+    if (allText.includes('بعت كل حاجه') || allText.includes('قلتلك') || allText.includes('ما بعتلك')) {
+      warnings.push('العميل يشعر بالتكرار');
+    }
+    if (allText.includes('مش فاهم') || allText.includes('ايه ده')) {
+      warnings.push('العميل محتاج توضيح');
+    }
+
+    return { mood, stage, warnings };
+  }
+
+  // تحليل اهتمامات العميل
+  static analyzeCustomerInterests(messages: any[]) {
+    const allText = messages?.map(m => m.content).join(' ') || '';
+
+    // الألوان المذكورة
+    const preferredColors = [];
+    const colors = ['أحمر', 'أسود', 'أبيض', 'أزرق', 'جملي', 'بيج', 'وردي', 'بنفسجي'];
+    colors.forEach(color => {
+      if (allText.includes(color)) {
+        preferredColors.push(color);
+      }
+    });
+
+    // المنتجات المذكورة
+    const inquiredProducts = [];
+    const products = ['كوتشي', 'حذاء', 'شوز', 'سنيكرز'];
+    products.forEach(product => {
+      if (allText.includes(product)) {
+        inquiredProducts.push(product);
+      }
+    });
+
+    return { preferredColors, inquiredProducts };
+  }
+
+  // 🖼️ نظام إرسال صور متعددة ذكي
   static async detectAndSendImage(geminiResponse: string, userMessage: string, senderId: string, accessToken: string): Promise<boolean> {
-    console.log('🔄 Unified color extraction with context memory');
+    console.log('🔄 Multi-image smart detection system');
 
     try {
-      // استيراد الألوان من النظام الموحد
-      const { ColorService } = await import('./colorService');
-
       // الحصول على الألوان من API الموحد
       const response = await fetch('http://localhost:3002/api/colors');
       let colorMap: Record<string, string> = {};
 
       if (response.ok) {
         const colors = await response.json();
-        // تحويل الألوان لخريطة بسيطة
         colors.forEach((color: any) => {
           colorMap[color.arabic_name] = color.image_url;
         });
@@ -767,79 +1059,221 @@ ${fullImageUrl}
           'أسود': 'https://files.easy-orders.net/1723117580290608498.jpg',
           'أزرق': 'https://files.easy-orders.net/1723117554054321721.jpg',
           'بيج': 'https://files.easy-orders.net/1739181695020677812.jpg',
-          'جملي': 'https://files.easy-orders.net/1739181874715440699.jpg',
-          'بنفسجي': 'https://files.easy-orders.net/1744720320703143217.jpg',
-          'وردي': 'https://files.easy-orders.net/1744720320703143217.jpg'
+          'جملي': 'https://files.easy-orders.net/1739181874715440699.jpg'
         };
         console.log('⚠️ Using fallback colors');
       }
 
-      let detectedColor = null;
-      let imageUrl = null;
+      // 🔍 البحث عن جميع الألوان المذكورة
+      const detectedColors: Array<{name: string, url: string, source: string}> = [];
 
-      // 1. البحث في رد Gemini أولاً
+      // 1. البحث في رد Gemini
       for (const [colorName, url] of Object.entries(colorMap)) {
         if (geminiResponse.includes(colorName)) {
-          detectedColor = colorName;
-          imageUrl = url;
-          console.log('🎨 Color found in Gemini response:', detectedColor);
-          break;
+          detectedColors.push({
+            name: colorName,
+            url: url,
+            source: 'gemini_response'
+          });
+          console.log('🎨 Color found in Gemini response:', colorName);
         }
       }
 
-      // 2. إذا مفيش لون في رد Gemini، ابحث في رسالة المستخدم
-      if (!detectedColor) {
-        for (const [colorName, url] of Object.entries(colorMap)) {
-          if (userMessage.includes(colorName)) {
-            detectedColor = colorName;
-            imageUrl = url;
-            console.log('🎨 Color found in user message:', detectedColor);
-            break;
+      // 2. البحث في رسالة المستخدم
+      for (const [colorName, url] of Object.entries(colorMap)) {
+        if (userMessage.includes(colorName)) {
+          // تجنب التكرار
+          const alreadyDetected = detectedColors.some(c => c.name === colorName);
+          if (!alreadyDetected) {
+            detectedColors.push({
+              name: colorName,
+              url: url,
+              source: 'user_message'
+            });
+            console.log('🎨 Color found in user message:', colorName);
           }
         }
       }
 
-      // 3. إذا لسه مفيش لون، استخدم السياق (آخر لون اتذكر)
-      if (!detectedColor) {
-        // البحث عن أي إشارة للألوان في السياق
-        const contextColors = ['أسود', 'أحمر', 'أبيض', 'أزرق', 'بيج', 'جملي', 'بنفسجي', 'وردي'];
+      // 3. التعامل مع طلبات خاصة - تحسين دقة الكشف
+      const isMultipleRequest = userMessage.includes('كل الألوان') ||
+                               userMessage.includes('كل الالوان') ||
+                               userMessage.includes('كل اللي عندك') ||
+                               userMessage.includes('شوفيني كل حاجه') ||
+                               userMessage.includes('كل المتاح') ||
+                               userMessage.includes('ابعتي ليا كل') ||
+                               userMessage.includes('عايز اشوف كل الالوان') ||  // ✅ أكثر دقة
+                               userMessage.includes('عايز اشوف كل الألوان') ||  // ✅ أكثر دقة
+                               userMessage.includes('وريني كل الالوان') ||     // ✅ أكثر دقة
+                               userMessage.includes('وريني كل الألوان');      // ✅ أكثر دقة
 
-        // إذا المستخدم طلب صورة بدون تحديد لون، استخدم آخر لون من السياق
+      const isComparisonRequest = userMessage.includes('والاحمر والاسود') ||
+                                 userMessage.includes('الأحمر والأزرق') ||
+                                 userMessage.includes('عايز اقارن') ||
+                                 userMessage.includes('ايه الفرق');
+
+      // 4. إذا طلب كل الألوان
+      if (isMultipleRequest) {
+        console.log('🌈 Multiple colors requested, sending all available');
+        detectedColors.length = 0; // مسح أي ألوان مكتشفة مسبقاً
+        for (const [colorName, url] of Object.entries(colorMap)) {
+          detectedColors.push({
+            name: colorName,
+            url: url,
+            source: 'all_colors_request'
+          });
+        }
+      }
+
+      // 5. إذا لم يجد ألوان، استخدم السياق أو أعلم العميل
+      if (detectedColors.length === 0) {
         if (userMessage.includes('صورة') || userMessage.includes('اشوف') || userMessage.includes('كمان')) {
-          // هنا يمكن تحسين النظام ليحفظ آخر لون في قاعدة البيانات
-          // لكن للبساطة، نستخدم الأسود كافتراضي (آخر لون اتذكر في المحادثة)
-          detectedColor = 'أسود';
-          imageUrl = colorMap[detectedColor];
-          console.log('🧠 Using context color (last mentioned):', detectedColor);
+          // البحث عن أي لون مذكور في رسالة المستخدم حتى لو غير متاح
+          const mentionedColors = ['أخضر', 'وردي', 'ذهبي', 'فضي', 'برتقالي', 'بنفسجي'];
+          let unavailableColor = null;
+
+          for (const color of mentionedColors) {
+            if (userMessage.includes(color)) {
+              unavailableColor = color;
+              break;
+            }
+          }
+
+          if (unavailableColor) {
+            console.log(`❌ Unavailable color requested: ${unavailableColor}`);
+            // لا نرسل صورة، Gemini سيتعامل مع الرد
+            return false;
+          } else {
+            // استخدام fallback فقط إذا لم يطلب لون محدد
+            detectedColors.push({
+              name: 'أسود',
+              url: colorMap['أسود'],
+              source: 'context_fallback'
+            });
+            console.log('🧠 Using context fallback color: أسود');
+          }
         }
       }
 
-      if (detectedColor && imageUrl) {
-        console.log('📤 Sending image:', imageUrl);
+      // 🚀 إرسال الصور
+      if (detectedColors.length > 0) {
+        console.log(`📤 Sending ${detectedColors.length} image(s):`, detectedColors.map(c => c.name));
 
-        try {
-          const { FacebookApiService } = await import('./facebookApi');
-          const facebookService = new FacebookApiService(accessToken);
+        const { FacebookApiService } = await import('./facebookApi');
+        const facebookService = new FacebookApiService(accessToken);
 
-          await facebookService.sendImage(accessToken, senderId, imageUrl);
-          console.log('✅ Image sent successfully for color:', detectedColor);
-          return true;
-        } catch (error) {
-          console.error('❌ Error sending image:', error);
-          return false;
+        let successCount = 0;
+        const maxImages = 5; // حد أقصى 5 صور لتجنب spam
+
+        // إرسال الصور مع تأخير بسيط بينها
+        for (let i = 0; i < Math.min(detectedColors.length, maxImages); i++) {
+          const color = detectedColors[i];
+
+          try {
+            await facebookService.sendImage(accessToken, senderId, color.url);
+            console.log(`✅ Image ${i + 1}/${Math.min(detectedColors.length, maxImages)} sent successfully: ${color.name}`);
+            successCount++;
+
+            // حفظ الصورة في قاعدة البيانات
+            try {
+              // الحصول على conversation_id من senderId
+              const { data: conversation } = await supabase
+                .from('conversations')
+                .select('id')
+                .eq('customer_facebook_id', senderId)
+                .single();
+
+              if (conversation) {
+                await supabase
+                  .from('messages')
+                  .insert({
+                    conversation_id: conversation.id,
+                    content: `صورة ${color.name}`,
+                    sender_type: 'bot',
+                    is_read: true,
+                    is_auto_reply: true,
+                    is_ai_generated: false,
+                    image_url: color.url
+                  });
+                console.log(`💾 Image message saved for ${color.name}`);
+              }
+            } catch (dbError) {
+              console.error(`❌ Error saving image message for ${color.name}:`, dbError);
+            }
+
+            // تأخير بسيط بين الصور (500ms)
+            if (i < Math.min(detectedColors.length, maxImages) - 1) {
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+          } catch (error) {
+            console.error(`❌ Error sending image for ${color.name}:`, error);
+          }
         }
+
+        // لا نرسل رسالة ملخص إضافية لأن Gemini بيرد رد كافي
+        console.log(`📝 ${successCount} images sent successfully, Gemini response covers the summary`);
+
+        // فقط لو Gemini مرد رد، نرسل رسالة ملخص بسيطة
+        // لكن في الحالة دي Gemini بيرد رد كافي فمش محتاجين رسالة إضافية
+
+        return successCount > 0;
       }
 
-      console.log('🔍 No color found in any context');
+      console.log('🔍 No colors found in any context');
       return false;
     } catch (error) {
-      console.error('❌ Error in smart color detection:', error);
+      console.error('❌ Error in multi-image detection:', error);
       return false;
     }
   }
 
+  // دالة مساعدة للحصول على إعدادات الصفحة الصحيحة
+  static async getCorrectPageSettings(conversationId: string) {
+    try {
+      const { FacebookApiService } = await import('./facebookApi');
 
+      // أولاً: محاولة الحصول على page_id من المحادثة
+      const { data: conversationData } = await supabase
+        .from('conversations')
+        .select('facebook_page_id')
+        .eq('id', conversationId)
+        .single();
 
+      if (conversationData?.facebook_page_id) {
+        console.log('🔍 Found page_id from conversation:', conversationData.facebook_page_id);
+        const settings = await FacebookApiService.getPageSettings(conversationData.facebook_page_id);
+        if (settings) return settings;
+      }
+
+      // إذا لم نجد إعدادات، جرب كل الصفحات المتاحة
+      console.log('🔍 Trying all available pages...');
+      const { data: allPages } = await supabase
+        .from('facebook_pages')
+        .select('*')
+        .eq('is_active', true);
+
+      if (allPages && allPages.length > 0) {
+        for (const page of allPages) {
+          try {
+            console.log(`🔍 Trying page: ${page.page_name} (${page.page_id})`);
+            const settings = await FacebookApiService.getPageSettings(page.page_id);
+            if (settings) {
+              console.log(`✅ Found working page: ${page.page_name}`);
+              return settings;
+            }
+          } catch (error) {
+            console.log(`❌ Page ${page.page_name} failed:`, error);
+            continue;
+          }
+        }
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error getting correct page settings:', error);
+      return null;
+    }
+  }
 
 }
 

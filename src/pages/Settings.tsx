@@ -37,6 +37,8 @@ const Settings = () => {
     pages,
     isLoadingPages,
     pagesError,
+    connectedPages,
+    isLoadingConnectedPages,
     setAccessToken,
     testConnection,
     connectPage,
@@ -124,7 +126,9 @@ const Settings = () => {
                     <div>
                       <h3 className="font-medium">صفحات الفيسبوك</h3>
                       <p className="text-sm text-gray-600">
-                        {isConnected && savedSettings ?
+                        {connectedPages.length > 0 ?
+                          `متصل - ${connectedPages.length} صفحة مربوطة` :
+                          isConnected && savedSettings ?
                           `متصل - ${savedSettings.page_name || 'صفحة غير محددة'}` :
                           "يمكنك ربط عدة صفحات فيسبوك"
                         }
@@ -132,16 +136,16 @@ const Settings = () => {
                     </div>
                   </div>
                   <div className="flex items-center space-x-2 space-x-reverse">
-                    <Badge variant={isConnected ? "default" : "secondary"} className={
-                      isConnected ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
+                    <Badge variant={connectedPages.length > 0 || isConnected ? "default" : "secondary"} className={
+                      connectedPages.length > 0 || isConnected ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
                     }>
-                      {isConnected ? (
+                      {connectedPages.length > 0 || isConnected ? (
                         <><CheckCircle className="w-3 h-3 ml-1" /> متصل</>
                       ) : (
                         <><AlertCircle className="w-3 h-3 ml-1" /> غير متصل</>
                       )}
                     </Badge>
-                    {isConnected && (
+                    {(connectedPages.length > 0 || isConnected) && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -242,7 +246,36 @@ const Settings = () => {
                 </div>
               )}
 
-              {isConnected && savedSettings && (
+              {/* عرض الصفحات المربوطة */}
+              {connectedPages.length > 0 && (
+                <div className="space-y-4">
+                  <h4 className="font-medium text-gray-800 mb-3">الصفحات المربوطة ({connectedPages.length})</h4>
+                  {connectedPages.map((page, index) => (
+                    <div key={page.id} className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div className="space-y-2 text-sm text-green-700">
+                          <p><strong>الصفحة:</strong> {page.page_name}</p>
+                          <p><strong>معرف الصفحة:</strong> {page.page_id}</p>
+                          <p><strong>تاريخ الربط:</strong> {new Date(page.created_at).toLocaleDateString('ar-EG')}</p>
+                        </div>
+                        <div className="flex items-center space-x-2 space-x-reverse">
+                          <Badge variant="default" className="bg-green-100 text-green-800">
+                            <CheckCircle className="w-3 h-3 ml-1" />
+                            متصل
+                          </Badge>
+                          {index === 0 && (
+                            <Badge variant="secondary" className="bg-blue-100 text-blue-800">
+                              الرئيسية
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {isConnected && savedSettings && connectedPages.length === 0 && (
                 <div className="space-y-4">
                   <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                     <h4 className="font-medium text-green-800 mb-2">تم الربط بنجاح!</h4>

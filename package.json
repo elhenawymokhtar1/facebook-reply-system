@@ -9,11 +9,10 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "webhook": "cd server && npm install && npm start",
-    "webhook:dev": "cd server && npm install && npm run dev",
+    "webhook": "node webhook-server.js",
     "api": "tsx src/api/server.ts",
     "image-server": "tsx src/api/image-server.ts",
-    "start:all": "concurrently \"npm run dev\" \"npm run webhook:dev\" \"npm run api\""
+    "start:all": "concurrently \"npm run dev\" \"npm run webhook\" \"npm run api\""
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",

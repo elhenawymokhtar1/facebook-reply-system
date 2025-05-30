@@ -72,6 +72,32 @@ export class AutoReplyService {
         return false;
       }
 
+      // التحقق من حالة Gemini AI
+      const { GeminiAiService } = await import('./geminiAi');
+      const geminiSettings = await GeminiAiService.getGeminiSettings();
+
+      if (!geminiSettings || !geminiSettings.is_enabled) {
+        console.log('🚫 Gemini AI is disabled - sending default response');
+
+        // إرسال رد افتراضي عندما يكون Gemini معطل بدون استخدام GeminiAiService
+        const defaultResponse = "شكراً لتواصلك معنا! سيتم الرد عليك قريباً من قبل فريق خدمة العملاء.";
+
+        try {
+          // إرسال الرد مباشرة عبر Facebook API بدون Gemini
+          const success = await this.sendDirectReply(senderId, defaultResponse, conversationId);
+          if (success) {
+            console.log('✅ Default response sent successfully');
+            return true;
+          } else {
+            console.error('❌ Failed to send default response');
+            return false;
+          }
+        } catch (error) {
+          console.error('❌ Failed to send default response:', error);
+          return false;
+        }
+      }
+
       console.log(`🚀 Calling Gemini AI for conversation: ${conversationId}`);
       console.log('🔍 About to call GeminiAiService.processIncomingMessage with:', { message, conversationId, senderId });
       console.log('🔍 GeminiAiService object:', GeminiAiService);
@@ -94,6 +120,56 @@ export class AutoReplyService {
       return false;
     } catch (error) {
       console.error('Error processing incoming message:', error);
+      return false;
+    }
+  }
+
+  // إرسال رد مباشر بدون Gemini (للرد الافتراضي عند تعطيل Gemini)
+  private static async sendDirectReply(
+    senderId: string,
+    message: string,
+    conversationId?: string
+  ): Promise<boolean> {
+    try {
+      console.log('📤 Sending direct reply without Gemini...');
+
+      // الحصول على إعدادات Facebook
+      const { data: facebookSettings, error: settingsError } = await supabase
+        .from('facebook_settings')
+        .select('*')
+        .single();
+
+      if (settingsError || !facebookSettings) {
+        console.error('Facebook settings not found:', settingsError);
+        return false;
+      }
+
+      // إرسال الرد مباشرة
+      const facebookService = new FacebookApiService(facebookSettings.access_token);
+
+      const result = await facebookService.sendMessage(
+        facebookSettings.access_token,
+        senderId,
+        message
+      );
+
+      if (result) {
+        console.log('✅ Direct reply sent successfully:', {
+          senderId,
+          message: message.substring(0, 50) + '...'
+        });
+
+        // حفظ الرد في قاعدة البيانات إذا كان لدينا معرف المحادثة
+        if (conversationId) {
+          await this.saveAutoReplyMessage(conversationId, message, false);
+        }
+
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Error sending direct reply:', error);
       return false;
     }
   }
@@ -180,16 +256,61 @@ export class AutoReplyService {
     pageId: string
   ): Promise<string | null> {
     try {
-      // البحث عن محادثة موجودة
+      // البحث عن محادثة موجودة بـ customer_facebook_id فقط (لأن فيه unique constraint عليه)
       const { data: existingConversation, error: searchError } = await supabase
         .from('conversations')
-        .select('id')
+        .select('id, customer_name')
         .eq('customer_facebook_id', customerFacebookId)
-        .eq('facebook_page_id', pageId)
-        .single();
+        .maybeSingle(); // استخدام maybeSingle بدلاً من single
+
+      if (searchError && searchError.code !== 'PGRST116') {
+        console.error('Error searching for conversation:', searchError);
+        return null;
+      }
 
       if (existingConversation) {
+        // إذا كانت المحادثة موجودة ولكن الاسم يبدأ بـ "User" والاسم الجديد مختلف، قم بتحديثه
+        if (existingConversation.customer_name.startsWith('User ') &&
+            customerName !== existingConversation.customer_name &&
+            !customerName.startsWith('User ')) {
+
+          console.log(`🔄 تحديث اسم العميل: ${existingConversation.customer_name} → ${customerName}`);
+
+          const { error: updateError } = await supabase
+            .from('conversations')
+            .update({
+              customer_name: customerName,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', existingConversation.id);
+
+          if (updateError) {
+            console.error('Error updating customer name:', updateError);
+          } else {
+            console.log('✅ تم تحديث اسم العميل بنجاح');
+          }
+        }
+
         return existingConversation.id;
+      }
+
+      // محاولة الحصول على الاسم الحقيقي من Facebook API
+      let realName = customerName;
+      try {
+        const { FacebookApiService } = await import('./facebookApi');
+        const pageSettings = await FacebookApiService.getPageSettings(pageId);
+
+        if (pageSettings && pageSettings.access_token) {
+          const facebookService = new FacebookApiService(pageSettings.access_token);
+          const userInfo = await facebookService.getUserInfo(customerFacebookId, pageSettings.access_token);
+
+          if (userInfo && userInfo.name) {
+            realName = userInfo.name;
+            console.log(`✅ Got real name for new conversation: ${realName} (ID: ${customerFacebookId})`);
+          }
+        }
+      } catch (error) {
+        console.log(`⚠️ Could not get real name for ${customerFacebookId}, using: ${customerName}`);
       }
 
       // إنشاء محادثة جديدة
@@ -198,15 +319,27 @@ export class AutoReplyService {
         .insert({
           facebook_page_id: pageId,
           customer_facebook_id: customerFacebookId,
-          customer_name: customerName,
+          customer_name: realName, // استخدام الاسم الحقيقي إذا توفر
           last_message_at: new Date().toISOString(),
           is_online: true,
-          unread_count: 1
+          unread_count: 0 // ابدأ بـ 0 وسيتم زيادته في updateConversation
         })
         .select('id')
         .single();
 
       if (createError) {
+        // إذا كان duplicate key error، جرب البحث مرة أخرى
+        if (createError.code === '23505') {
+          console.log('⚠️ Conversation already exists, fetching it...');
+          const { data: existingConv } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('customer_facebook_id', customerFacebookId)
+            .single();
+
+          return existingConv?.id || null;
+        }
+
         console.error('Error creating conversation:', createError);
         return null;
       }
@@ -235,8 +368,27 @@ export class AutoReplyService {
               const messageText = messagingEvent.message.text;
 
               if (messageText) {
-                // الحصول على معلومات المرسل (يمكن تحسينها)
-                const senderName = `User ${senderId}`;
+                // الحصول على معلومات المرسل الحقيقية من Facebook API
+                let senderName = `User ${senderId}`;
+
+                try {
+                  // الحصول على إعدادات الصفحة للحصول على access token
+                  const { FacebookApiService } = await import('./facebookApi');
+                  const pageSettings = await FacebookApiService.getPageSettings(pageId);
+
+                  if (pageSettings && pageSettings.access_token) {
+                    const facebookService = new FacebookApiService(pageSettings.access_token);
+                    const userInfo = await facebookService.getUserInfo(senderId, pageSettings.access_token);
+
+                    if (userInfo && userInfo.name) {
+                      senderName = userInfo.name;
+                      console.log(`✅ Got real user name: ${senderName} for ID: ${senderId}`);
+                    }
+                  }
+                } catch (error) {
+                  console.error('Error getting user name from Facebook API:', error);
+                  // استخدم الاسم الافتراضي في حالة الخطأ
+                }
 
                 // إنشاء أو الحصول على المحادثة
                 const conversationId = await this.getOrCreateConversation(

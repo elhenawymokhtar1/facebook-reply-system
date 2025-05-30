@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔍 تشخيص الواجهة</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 1000px; margin: 0 auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        .success { background: #e6ffe6; border-color: #4caf50; }
+        .error { background: #ffe6e6; border-color: #f44336; }
+        .warning { background: #fff3cd; border-color: #ffc107; }
+        .info { background: #e3f2fd; border-color: #2196f3; }
+        button { background: #007bff; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #0056b3; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 5px; overflow-x: auto; font-size: 12px; }
+        .conversation { border: 1px solid #ddd; margin: 5px 0; padding: 10px; border-radius: 5px; background: #f9f9f9; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 تشخيص مشكلة الواجهة</h1>
+        
+        <div class="section info">
+            <h3>📊 معلومات النظام</h3>
+            <p><strong>URL الحالي:</strong> <span id="currentUrl"></span></p>
+            <p><strong>User Agent:</strong> <span id="userAgent"></span></p>
+            <p><strong>الوقت:</strong> <span id="currentTime"></span></p>
+        </div>
+
+        <div class="section">
+            <h3>🧪 اختبارات الاتصال</h3>
+            <button onclick="testAPIConnection()">🔗 اختبار الاتصال بالـ API</button>
+            <button onclick="testCORS()">🌐 اختبار CORS</button>
+            <button onclick="testFrontendAPI()">⚛️ اختبار API الواجهة</button>
+            <button onclick="clearResults()">🗑️ مسح النتائج</button>
+        </div>
+
+        <div id="results"></div>
+    </div>
+
+    <script>
+        // تحديث معلومات النظام
+        document.getElementById('currentUrl').textContent = window.location.href;
+        document.getElementById('userAgent').textContent = navigator.userAgent;
+        document.getElementById('currentTime').textContent = new Date().toLocaleString('ar-EG');
+
+        function addResult(title, content, type = 'info') {
+            const resultsDiv = document.getElementById('results');
+            const section = document.createElement('div');
+            section.className = `section ${type}`;
+            section.innerHTML = `
+                <h3>${title}</h3>
+                <div>${content}</div>
+            `;
+            resultsDiv.appendChild(section);
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+
+        async function testAPIConnection() {
+            addResult('🔗 اختبار الاتصال بالـ API', 'جاري الاختبار...', 'info');
+
+            try {
+                const startTime = Date.now();
+                const response = await fetch('http://localhost:3002/api/conversations?limit=5');
+                const endTime = Date.now();
+                const duration = endTime - startTime;
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                
+                addResult('✅ نجح الاتصال بالـ API', `
+                    <p><strong>📊 عدد المحادثات:</strong> ${data.length}</p>
+                    <p><strong>⏱️ وقت الاستجابة:</strong> ${duration}ms</p>
+                    <p><strong>📡 حالة HTTP:</strong> ${response.status}</p>
+                    <p><strong>🔍 أول محادثة:</strong></p>
+                    <pre>${JSON.stringify(data[0], null, 2)}</pre>
+                `, 'success');
+
+            } catch (error) {
+                addResult('❌ فشل الاتصال بالـ API', `
+                    <p><strong>الخطأ:</strong> ${error.message}</p>
+                    <p><strong>النوع:</strong> ${error.name}</p>
+                `, 'error');
+            }
+        }
+
+        async function testCORS() {
+            addResult('🌐 اختبار CORS', 'جاري الاختبار...', 'info');
+
+            try {
+                const response = await fetch('http://localhost:3002/api/conversations?limit=1', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Origin': window.location.origin
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                
+                addResult('✅ CORS يعمل بشكل صحيح', `
+                    <p><strong>📊 البيانات:</strong> تم جلب ${data.length} محادثة</p>
+                    <p><strong>🌐 Origin:</strong> ${window.location.origin}</p>
+                    <p><strong>📡 Headers:</strong> تم إرسالها بنجاح</p>
+                `, 'success');
+
+            } catch (error) {
+                addResult('❌ مشكلة في CORS', `
+                    <p><strong>الخطأ:</strong> ${error.message}</p>
+                    <p><strong>الحل المقترح:</strong> تحقق من إعدادات CORS في السيرفر</p>
+                `, 'error');
+            }
+        }
+
+        async function testFrontendAPI() {
+            addResult('⚛️ اختبار API الواجهة', 'جاري الاختبار...', 'info');
+
+            try {
+                // محاولة الوصول للواجهة
+                const frontendResponse = await fetch('http://localhost:8083/');
+                
+                if (!frontendResponse.ok) {
+                    throw new Error(`Frontend not accessible: ${frontendResponse.status}`);
+                }
+
+                addResult('✅ الواجهة متاحة', `
+                    <p><strong>📡 حالة الواجهة:</strong> ${frontendResponse.status}</p>
+                    <p><strong>🌐 URL:</strong> http://localhost:8083/</p>
+                `, 'success');
+
+                // اختبار إذا كانت الواجهة تستطيع الوصول للـ API
+                try {
+                    const apiFromFrontend = await fetch('/api/conversations?limit=3');
+                    
+                    if (apiFromFrontend.ok) {
+                        const data = await apiFromFrontend.json();
+                        addResult('✅ الواجهة تصل للـ API', `
+                            <p><strong>📊 البيانات:</strong> ${data.length} محادثة</p>
+                            <p><strong>🔗 الطريق:</strong> نسبي (/api/conversations)</p>
+                        `, 'success');
+                    } else {
+                        addResult('⚠️ الواجهة لا تصل للـ API المحلي', `
+                            <p><strong>📡 حالة:</strong> ${apiFromFrontend.status}</p>
+                            <p><strong>💡 الحل:</strong> استخدام URL كامل</p>
+                        `, 'warning');
+                    }
+                } catch (apiError) {
+                    addResult('⚠️ مشكلة في الوصول للـ API من الواجهة', `
+                        <p><strong>الخطأ:</strong> ${apiError.message}</p>
+                        <p><strong>💡 الحل:</strong> تحقق من إعدادات الـ proxy</p>
+                    `, 'warning');
+                }
+
+            } catch (error) {
+                addResult('❌ الواجهة غير متاحة', `
+                    <p><strong>الخطأ:</strong> ${error.message}</p>
+                    <p><strong>💡 الحل:</strong> تأكد من تشغيل npm run dev</p>
+                `, 'error');
+            }
+        }
+
+        // تشغيل اختبار تلقائي
+        window.addEventListener('load', () => {
+            console.log('🔍 صفحة التشخيص جاهزة');
+            
+            // اختبار تلقائي بعد ثانيتين
+            setTimeout(() => {
+                testAPIConnection();
+            }, 2000);
+        });
+    </script>
+</body>
+</html>

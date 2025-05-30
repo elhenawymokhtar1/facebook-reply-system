@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار الواجهة</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .conversation {
+            border: 1px solid #ddd;
+            margin: 10px 0;
+            padding: 15px;
+            border-radius: 5px;
+            background: #f9f9f9;
+        }
+        .loading {
+            text-align: center;
+            color: #666;
+            font-size: 18px;
+        }
+        .error {
+            color: red;
+            background: #ffe6e6;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .success {
+            color: green;
+            background: #e6ffe6;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 اختبار جلب المحادثات</h1>
+        
+        <div>
+            <button onclick="testAPI()">🔄 اختبار API</button>
+            <button onclick="testWithLimit()">📊 اختبار مع Limit</button>
+            <button onclick="clearResults()">🗑️ مسح النتائج</button>
+        </div>
+        
+        <div id="status" class="loading">جاهز للاختبار...</div>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        const statusDiv = document.getElementById('status');
+        const resultsDiv = document.getElementById('results');
+
+        function updateStatus(message, type = 'loading') {
+            statusDiv.className = type;
+            statusDiv.innerHTML = message;
+        }
+
+        function addResult(content) {
+            const div = document.createElement('div');
+            div.innerHTML = content;
+            resultsDiv.appendChild(div);
+        }
+
+        function clearResults() {
+            resultsDiv.innerHTML = '';
+            updateStatus('تم مسح النتائج', 'success');
+        }
+
+        async function testAPI() {
+            updateStatus('🔄 جاري اختبار API...', 'loading');
+            clearResults();
+
+            try {
+                console.log('🔄 بدء اختبار API...');
+                
+                const startTime = Date.now();
+                const response = await fetch('http://localhost:3002/api/conversations', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                const endTime = Date.now();
+                const duration = endTime - startTime;
+
+                console.log('📊 استجابة API:', response);
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('📋 البيانات:', data);
+
+                updateStatus(`✅ نجح الاختبار! (${duration}ms)`, 'success');
+                
+                addResult(`
+                    <div class="success">
+                        <h3>✅ نتائج الاختبار:</h3>
+                        <p><strong>📊 عدد المحادثات:</strong> ${data.length}</p>
+                        <p><strong>⏱️ وقت الاستجابة:</strong> ${duration}ms</p>
+                        <p><strong>📡 حالة HTTP:</strong> ${response.status} ${response.statusText}</p>
+                    </div>
+                `);
+
+                if (data.length > 0) {
+                    addResult(`
+                        <div class="conversation">
+                            <h4>📝 أول محادثة:</h4>
+                            <p><strong>👤 العميل:</strong> ${data[0].customer_name}</p>
+                            <p><strong>💬 آخر رسالة:</strong> ${data[0].last_message || 'لا توجد'}</p>
+                            <p><strong>📅 التاريخ:</strong> ${new Date(data[0].last_message_at).toLocaleString('ar-EG')}</p>
+                            <p><strong>🆔 Facebook ID:</strong> ${data[0].customer_facebook_id}</p>
+                        </div>
+                    `);
+                } else {
+                    addResult(`<div class="error">❌ لا توجد محادثات في البيانات</div>`);
+                }
+
+            } catch (error) {
+                console.error('❌ خطأ في API:', error);
+                updateStatus(`❌ فشل الاختبار: ${error.message}`, 'error');
+                
+                addResult(`
+                    <div class="error">
+                        <h3>❌ خطأ في الاختبار:</h3>
+                        <p><strong>الرسالة:</strong> ${error.message}</p>
+                        <p><strong>النوع:</strong> ${error.name}</p>
+                    </div>
+                `);
+            }
+        }
+
+        async function testWithLimit() {
+            updateStatus('🔄 جاري اختبار API مع Limit...', 'loading');
+            clearResults();
+
+            try {
+                console.log('🔄 بدء اختبار API مع limit=10...');
+                
+                const startTime = Date.now();
+                const response = await fetch('http://localhost:3002/api/conversations?limit=10', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+
+                const endTime = Date.now();
+                const duration = endTime - startTime;
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                updateStatus(`✅ نجح الاختبار مع Limit! (${duration}ms)`, 'success');
+                
+                addResult(`
+                    <div class="success">
+                        <h3>✅ نتائج الاختبار مع Limit:</h3>
+                        <p><strong>📊 عدد المحادثات:</strong> ${data.length} (المطلوب: 10)</p>
+                        <p><strong>⏱️ وقت الاستجابة:</strong> ${duration}ms</p>
+                        <p><strong>✅ Limit يعمل:</strong> ${data.length <= 10 ? 'نعم' : 'لا'}</p>
+                    </div>
+                `);
+
+                // عرض أول 3 محادثات
+                data.slice(0, 3).forEach((conv, index) => {
+                    addResult(`
+                        <div class="conversation">
+                            <h4>📝 محادثة ${index + 1}:</h4>
+                            <p><strong>👤 العميل:</strong> ${conv.customer_name}</p>
+                            <p><strong>💬 آخر رسالة:</strong> ${conv.last_message || 'لا توجد'}</p>
+                            <p><strong>📅 التاريخ:</strong> ${new Date(conv.last_message_at).toLocaleString('ar-EG')}</p>
+                        </div>
+                    `);
+                });
+
+            } catch (error) {
+                console.error('❌ خطأ في API مع Limit:', error);
+                updateStatus(`❌ فشل الاختبار: ${error.message}`, 'error');
+                
+                addResult(`
+                    <div class="error">
+                        <h3>❌ خطأ في الاختبار مع Limit:</h3>
+                        <p><strong>الرسالة:</strong> ${error.message}</p>
+                    </div>
+                `);
+            }
+        }
+
+        // اختبار تلقائي عند تحميل الصفحة
+        window.addEventListener('load', () => {
+            updateStatus('🎯 الصفحة جاهزة للاختبار', 'success');
+            console.log('🎯 صفحة اختبار الواجهة جاهزة');
+        });
+    </script>
+</body>
+</html>
