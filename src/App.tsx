@@ -12,9 +12,13 @@ import Settings from "./pages/Settings";
 import Conversations from "./pages/Conversations";
 import Orders from "./pages/Orders";
 import ProductImages from "./pages/ProductImages";
-import ColorManagement from "./pages/ColorManagement";
+import Products from "./pages/Products";
+import ProductsVariants from "./pages/ProductsVariants";
+import Categories from "./pages/Categories";
+// import FacebookPageManagement from "./pages/FacebookPageManagement";
 import NotFound from "./pages/NotFound";
 import { NameUpdateService } from "./services/nameUpdateService";
+import { initializeDatabase } from "./utils/setupDatabase";
 
 const queryClient = new QueryClient();
 
@@ -23,6 +27,9 @@ const App = () => {
     // بدء خدمة تحديث الأسماء التلقائية
     console.log('🚀 بدء تطبيق Facebook Auto Reply');
     NameUpdateService.startAutoUpdate();
+
+    // إعداد قاعدة البيانات
+    initializeDatabase();
 
     // تنظيف عند إغلاق التطبيق
     return () => {
@@ -41,10 +48,13 @@ const App = () => {
             <Route path="/responses" element={<Responses />} />
             <Route path="/conversations" element={<Conversations />} />
             <Route path="/orders" element={<Orders />} />
+            <Route path="/products" element={<Products />} />
+            <Route path="/products-variants" element={<ProductsVariants />} />
+            <Route path="/categories" element={<Categories />} />
             <Route path="/product-images" element={<ProductImages />} />
-            <Route path="/color-management" element={<ColorManagement />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/settings" element={<Settings />} />
+            {/* <Route path="/facebook-management" element={<FacebookPageManagement />} /> */}
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

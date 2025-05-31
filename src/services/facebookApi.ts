@@ -164,20 +164,21 @@ export class FacebookApiService {
       console.log('🔍 Sending message with details:', {
         recipientId,
         messageLength: message.length,
-        tokenPrefix: pageAccessToken ? pageAccessToken.substring(0, 10) + '...' : 'null',
-        url: `https://graph.facebook.com/v21.0/me/messages?access_token=${pageAccessToken ? pageAccessToken.substring(0, 10) + '...' : 'null'}`
+        tokenPrefix: pageAccessToken ? pageAccessToken.substring(0, 10) + '...' : 'null'
       });
 
+      // استخدام API Server الخاص بنا بدلاً من الاتصال المباشر بـ Facebook API لتجنب مشاكل CORS
       const response = await fetch(
-        `https://graph.facebook.com/v21.0/me/messages?access_token=${pageAccessToken}`,
+        `/api/facebook/send-message`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            recipient: { id: recipientId },
-            message: { text: message },
+            access_token: pageAccessToken,
+            recipient_id: recipientId,
+            message: message
           }),
         }
       );
@@ -212,39 +213,32 @@ export class FacebookApiService {
   // إرسال صورة إلى مستخدم
   async sendImage(pageAccessToken: string, recipientId: string, imageUrl: string): Promise<any> {
     try {
-      console.log('🔄 Attempting to send image as URL attachment:', imageUrl);
+      console.log('🔄 Attempting to send image via API Server:', imageUrl);
 
-      // محاولة إرسال الصورة كـ URL attachment أولاً
+      // استخدام API Server الخاص بنا بدلاً من الاتصال المباشر بـ Facebook API لتجنب مشاكل CORS
       try {
         const response = await fetch(
-          `https://graph.facebook.com/v21.0/me/messages?access_token=${pageAccessToken}`,
+          `/api/facebook/send-image`,
           {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              recipient: { id: recipientId },
-              message: {
-                attachment: {
-                  type: 'image',
-                  payload: {
-                    url: imageUrl,
-                    is_reusable: false
-                  }
-                }
-              }
+              access_token: pageAccessToken,
+              recipient_id: recipientId,
+              image_url: imageUrl
             }),
           }
         );
 
         const responseText = await response.text();
-        console.log('📤 Facebook API response:', response.status, responseText);
+        console.log('📤 API Server response:', response.status, responseText);
 
         if (response.ok) {
           const data = JSON.parse(responseText);
           if (!data.error) {
-            console.log('✅ Image sent successfully as URL attachment');
+            console.log('✅ Image sent successfully via API Server');
             return data;
           }
         }
@@ -528,16 +522,23 @@ export class FacebookApiService {
   // الحصول على جميع الصفحات المربوطة من قاعدة البيانات
   static async getAllConnectedPages(): Promise<any[]> {
     try {
-      const { data, error } = await supabase
-        .from('facebook_settings')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const response = await fetch('/api/facebook/settings');
 
-      if (error) {
-        throw error;
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
 
-      return data || [];
+      const data = await response.json();
+
+      // إضافة معلومات إضافية لكل صفحة
+      const pagesWithStatus = (data || []).map(page => ({
+        ...page,
+        has_access_token: !!page.access_token,
+        has_backup_token: !!page.backup_access_token,
+        can_reactivate: !page.access_token && !!page.backup_access_token
+      }));
+
+      return pagesWithStatus;
     } catch (error) {
       console.error('Error fetching connected pages:', error);
       throw error;
@@ -580,6 +581,81 @@ export class FacebookApiService {
   // الحصول على جميع الصفحات (alias للتوافق)
   static async getAllPages(): Promise<any[]> {
     return this.getAllConnectedPages();
+  }
+
+  // قطع الاتصال مع صفحة محددة (إيقاف مؤقت)
+  static async disconnectPage(pageId: string): Promise<void> {
+    try {
+      console.log('🔌 قطع الاتصال مع الصفحة:', pageId);
+
+      const response = await fetch(`/api/facebook/disconnect/${pageId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ تم قطع الاتصال بنجاح:', result.message);
+    } catch (error) {
+      console.error('❌ خطأ في قطع الاتصال:', error);
+      throw error;
+    }
+  }
+
+  // حذف صفحة نهائياً
+  static async deletePage(pageId: string): Promise<void> {
+    try {
+      console.log('🗑️ حذف الصفحة نهائياً:', pageId);
+
+      const response = await fetch(`/api/facebook/delete/${pageId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ تم حذف الصفحة بنجاح:', result.message);
+    } catch (error) {
+      console.error('❌ خطأ في حذف الصفحة:', error);
+      throw error;
+    }
+  }
+
+  // إعادة تفعيل صفحة
+  static async reactivatePage(pageId: string): Promise<void> {
+    try {
+      console.log('🔄 إعادة تفعيل الصفحة:', pageId);
+
+      const response = await fetch(`/api/facebook/reactivate/${pageId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const result = await response.json();
+      console.log('✅ تم إعادة التفعيل بنجاح:', result.message);
+    } catch (error) {
+      console.error('❌ خطأ في إعادة التفعيل:', error);
+      throw error;
+    }
   }
 }
 

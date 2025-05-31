@@ -10,14 +10,31 @@ export const useGeminiSettings = () => {
   const { data: settings, isLoading, error } = useQuery({
     queryKey: ['gemini-settings'],
     queryFn: async () => {
-      return await GeminiAiService.getGeminiSettings();
+      const response = await fetch('http://localhost:3002/api/gemini/settings');
+      if (!response.ok) {
+        throw new Error('Failed to fetch Gemini settings');
+      }
+      return await response.json();
     },
   });
 
   // حفظ إعدادات Gemini
   const saveSettings = useMutation({
     mutationFn: async (newSettings: Partial<GeminiSettings>) => {
-      await GeminiAiService.saveGeminiSettings(newSettings);
+      const response = await fetch('http://localhost:3002/api/gemini/settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(newSettings)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to save settings');
+      }
+
+      return await response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['gemini-settings'] });
@@ -39,15 +56,20 @@ export const useGeminiSettings = () => {
   // اختبار الاتصال مع Gemini
   const testConnection = useMutation({
     mutationFn: async (apiKey: string) => {
-      const testSettings: GeminiSettings = {
-        api_key: apiKey,
-        model: 'gemini-1.5-flash',
-        prompt_template: 'اختبار الاتصال',
-        is_enabled: true
-      };
+      const response = await fetch('http://localhost:3002/api/gemini/test', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ api_key: apiKey })
+      });
 
-      const geminiService = new GeminiAiService(testSettings);
-      return await geminiService.generateResponse('مرحبا');
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to test connection');
+      }
+
+      return await response.json();
     },
     onSuccess: (result) => {
       if (result.success) {

@@ -1,6 +1,11 @@
-import { supabase } from "@/integrations/supabase/client";
+import { createClient } from '@supabase/supabase-js';
 import { FacebookApiService } from "./facebookApi";
 import { GeminiAiService } from "./geminiAi";
+
+// إعداد Supabase
+const supabaseUrl = 'https://ddwszecfsfkjnahesymm.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRkd3N6ZWNmc2Zram5haGVzeW1tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzMDc2MDYsImV4cCI6MjA2Mzg4MzYwNn0.5jo4tgLAMqwVnYkhUYBa3WrNxann8xBqkNzba8DaCMg';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export interface AutoReplyMatch {
   id: string;

@@ -9,6 +9,7 @@ import { useState } from "react";
 import { useConversations } from "@/hooks/useConversations";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getDisplayName } from "@/utils/nameUtils";
 
 interface ConversationsListProps {
   selectedConversation: string | null;
@@ -18,20 +19,8 @@ interface ConversationsListProps {
 const ConversationsList = ({ selectedConversation, onSelectConversation }: ConversationsListProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [deletingConversation, setDeletingConversation] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<'all' | 'unread' | 'replied'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'unread'>('all');
   const { conversations, isLoading, error, refetch } = useConversations();
-
-  // إضافة logs للكومبوننت
-  console.log('🎯 [ConversationsList] Component state:', {
-    conversationsCount: conversations.length,
-    isLoading,
-    hasError: !!error,
-    errorMessage: error?.message,
-    searchTerm,
-    selectedConversation
-  });
-
-  console.log('📋 [ConversationsList] Conversations data:', conversations.slice(0, 3));
 
   // حذف المحادثة
   const deleteConversation = async (conversationId: string) => {
@@ -48,15 +37,7 @@ const ConversationsList = ({ selectedConversation, onSelectConversation }: Conve
         throw messagesError;
       }
 
-      // حذف الطلبات المرتبطة (إن وجدت)
-      const { error: ordersError } = await supabase
-        .from('orders')
-        .delete()
-        .eq('conversation_id', conversationId);
-
-      if (ordersError) {
-        console.warn('Error deleting related orders:', ordersError);
-      }
+      // ملاحظة: تم إزالة محاولة حذف الطلبات لأن جدول الطلبات غير موجود في قاعدة البيانات الحالية
 
       // حذف المحادثة
       const { error: conversationError } = await supabase
@@ -85,46 +66,21 @@ const ConversationsList = ({ selectedConversation, onSelectConversation }: Conve
     }
   };
 
+  // تبسيط منطق الفلترة
   const filteredConversations = conversations.filter(conv => {
     if (!conv) return false;
 
-    const customerName = conv.customer_name || '';
-    const lastMessage = conv.last_message || '';
-
     // فلترة البحث
-    const matchesSearch = customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-           lastMessage.toLowerCase().includes(searchTerm.toLowerCase());
+    const searchMatch = !searchTerm ||
+      (conv.customer_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (conv.last_message || '').toLowerCase().includes(searchTerm.toLowerCase());
 
-    // فلترة الحالة بناءً على الرسائل
-    let matchesStatus = true;
-    if (statusFilter === 'unread') {
-      // غير مقروء = يوجد رسائل من العميل لم يتم الرد عليها
-      matchesStatus = conv.unread_count > 0;
-    } else if (statusFilter === 'replied') {
-      // مرسل = لا توجد رسائل غير مقروءة (تم الرد على كل شيء)
-      matchesStatus = conv.unread_count === 0;
-    }
+    // فلترة الحالة
+    const statusMatch = statusFilter === 'all' ||
+      (statusFilter === 'unread' && conv.unread_count > 0);
 
-    return matchesSearch && matchesStatus;
+    return searchMatch && statusMatch;
   });
-
-  console.log('🔍 [ConversationsList] Filtered conversations:', {
-    originalCount: conversations.length,
-    filteredCount: filteredConversations.length,
-    searchTerm,
-    unreadCount: conversations.filter(c => c.unread_count > 0).length,
-    repliedCount: conversations.filter(c => c.unread_count === 0).length
-  });
-
-  // تشخيص إضافي للمحادثات
-  console.log('📊 [ConversationsList] Conversations analysis:',
-    conversations.map(c => ({
-      id: c.id,
-      customer_name: c.customer_name,
-      unread_count: c.unread_count,
-      last_message: c.last_message?.substring(0, 30) + '...'
-    }))
-  );
 
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp);
@@ -199,46 +155,6 @@ const ConversationsList = ({ selectedConversation, onSelectConversation }: Conve
             غير مقروء ({conversations.filter(c => c.unread_count > 0).length})
           </Button>
 
-          <Button
-            variant={statusFilter === 'replied' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setStatusFilter('replied')}
-            className="text-xs"
-          >
-            <CheckCircle className="w-3 h-3 ml-1 text-green-600" />
-            مرسل ({conversations.filter(c => c.unread_count === 0).length})
-          </Button>
-        </div>
-
-        {/* معلومات التشخيص وإحصائيات الصفحات */}
-        <div className="mt-2 space-y-2">
-          <div className="text-xs text-gray-500">
-            📊 المحادثات: {conversations.length} | 🔍 المفلترة: {filteredConversations.length} |
-            {isLoading ? ' 🔄 جاري التحميل...' : ' ✅ تم التحميل'}
-            {error && ' ❌ خطأ'}
-          </div>
-
-          {/* إحصائيات الصفحات */}
-          {conversations.length > 0 && (
-            <div className="flex flex-wrap gap-2">
-              {(() => {
-                const pageStats = conversations.reduce((acc, conv) => {
-                  const pageName = conv.page_name ||
-                    (conv.facebook_page_id === '260345600493273' ? 'Swan shop' :
-                     conv.facebook_page_id === '240244019177739' ? 'سولا 127' :
-                     'صفحة غير معروفة');
-                  acc[pageName] = (acc[pageName] || 0) + 1;
-                  return acc;
-                }, {} as Record<string, number>);
-
-                return Object.entries(pageStats).map(([pageName, count]) => (
-                  <span key={pageName} className="text-xs bg-gray-100 px-2 py-1 rounded-full">
-                    📄 {pageName}: {count}
-                  </span>
-                ));
-              })()}
-            </div>
-          )}
         </div>
       </CardHeader>
 
@@ -281,9 +197,12 @@ const ConversationsList = ({ selectedConversation, onSelectConversation }: Conve
                     </div>
                     <div className="flex-1">
                       <h4 className="font-medium text-gray-900">
-                        {conversation.customer_name.startsWith('User ')
-                          ? `عميل ${conversation.customer_facebook_id.slice(-6)}`
-                          : conversation.customer_name}
+                        {getDisplayName(
+                          conversation.customer_name,
+                          conversation.customer_facebook_id,
+                          conversation.id,
+                          conversation.page_name
+                        )}
                       </h4>
                       <div className="flex items-center space-x-1 space-x-reverse text-xs text-gray-500">
                         <Clock className="w-3 h-3" />
@@ -329,9 +248,7 @@ const ConversationsList = ({ selectedConversation, onSelectConversation }: Conve
                         <AlertDialogHeader>
                           <AlertDialogTitle>حذف المحادثة</AlertDialogTitle>
                           <AlertDialogDescription>
-                            هل أنت متأكد من حذف محادثة "{conversation.customer_name.startsWith('User ')
-                            ? `عميل ${conversation.customer_facebook_id.slice(-6)}`
-                            : conversation.customer_name}"؟
+                            هل أنت متأكد من حذف محادثة "{getDisplayName(conversation.customer_name, conversation.customer_facebook_id, conversation.id, conversation.page_name)}"?
                             <br />
                             سيتم حذف جميع الرسائل والطلبات المرتبطة بهذه المحادثة نهائياً.
                           </AlertDialogDescription>

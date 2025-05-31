@@ -6,7 +6,7 @@ import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 
 const app = express();
-const PORT = 3001; // منفذ واحد فقط
+const PORT = 3003; // منفذ واحد فقط
 
 // إعدادات Supabase
 const supabaseUrl = 'https://ddwszecfsfkjnahesymm.supabase.co';
@@ -71,6 +71,10 @@ app.post('/webhook', async (req, res) => {
   console.log('🔔 WEBHOOK RECEIVED!');
   console.log('📨 Data:', JSON.stringify(body, null, 2));
 
+  // تحديث الإحصائيات
+  systemStats.messagesReceived++;
+  systemStats.lastMessageTime = new Date().toLocaleTimeString('ar-EG');
+
   try {
     // التحقق من أن الطلب من Facebook
     if (body.object !== 'page') {
@@ -93,6 +97,19 @@ app.post('/webhook', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Error processing webhook:', error);
+
+    // إضافة الخطأ للإحصائيات
+    systemStats.errors.push({
+      timestamp: new Date().toISOString(),
+      error: error.message,
+      stack: error.stack
+    });
+
+    // الاحتفاظ بآخر 50 خطأ فقط
+    if (systemStats.errors.length > 50) {
+      systemStats.errors = systemStats.errors.slice(-50);
+    }
+
     res.status(500).send('Internal Server Error');
   }
 });
@@ -100,6 +117,67 @@ app.post('/webhook', async (req, res) => {
 // 🔄 معالجة الرسائل
 async function processMessage(messaging, pageId) {
   console.log('🔄 Processing message:', messaging);
+
+  // 🔍 فحص حالة الصفحة أولاً
+  console.log('🔍 فحص حالة الصفحة...');
+  try {
+    const { data: pageSettings, error: pageError } = await supabase
+      .from('facebook_settings')
+      .select('is_active, page_name, disconnected_at, access_token')
+      .eq('page_id', pageId)
+      .single();
+
+    if (pageError) {
+      console.log('⚠️ لم يتم العثور على إعدادات الصفحة:', pageError.message);
+      // نكمل المعالجة للصفحات غير المسجلة
+    } else if (pageSettings) {
+      console.log(`📊 حالة الصفحة "${pageSettings.page_name}":`, {
+        is_active: pageSettings.is_active,
+        disconnected_at: pageSettings.disconnected_at,
+        has_access_token: !!pageSettings.access_token
+      });
+
+      // إذا كانت الصفحة معطلة، نتجاهل الرسالة
+      if (pageSettings.is_active === false) {
+        console.log(`🚫 الصفحة "${pageSettings.page_name}" معطلة - تم تجاهل الرسالة`);
+        console.log(`📅 تاريخ قطع الاتصال: ${pageSettings.disconnected_at}`);
+
+        // إضافة إحصائية للرسائل المتجاهلة
+        systemStats.messagesIgnored = (systemStats.messagesIgnored || 0) + 1;
+        systemStats.lastIgnoredMessage = {
+          pageId: pageId,
+          pageName: pageSettings.page_name,
+          senderId: messaging.sender?.id,
+          timestamp: new Date().toISOString(),
+          reason: 'page_disabled'
+        };
+
+        return; // توقف هنا ولا تعالج الرسالة
+      }
+
+      // إذا لم يكن هناك Access Token، نتجاهل الرسالة
+      if (!pageSettings.access_token) {
+        console.log(`🔑 الصفحة "${pageSettings.page_name}" بدون Access Token - تم تجاهل الرسالة`);
+
+        // إضافة إحصائية للرسائل المتجاهلة
+        systemStats.messagesIgnored = (systemStats.messagesIgnored || 0) + 1;
+        systemStats.lastIgnoredMessage = {
+          pageId: pageId,
+          pageName: pageSettings.page_name,
+          senderId: messaging.sender?.id,
+          timestamp: new Date().toISOString(),
+          reason: 'no_access_token'
+        };
+
+        return; // توقف هنا ولا تعالج الرسالة
+      }
+
+      console.log(`✅ الصفحة "${pageSettings.page_name}" نشطة ولديها Access Token - متابعة المعالجة`);
+    }
+  } catch (checkError) {
+    console.error('❌ خطأ في فحص حالة الصفحة:', checkError);
+    // نكمل المعالجة في حالة الخطأ
+  }
 
   try {
     // معالجة الرسائل المرسلة من الصفحة (Echo)
@@ -267,6 +345,13 @@ async function handleCustomerMessage(messaging, pageId) {
     console.log('ℹ️ Auto-reply will be implemented later');
   } catch (autoReplyError) {
     console.error('❌ Error in auto-reply:', autoReplyError);
+
+    // إضافة الخطأ للإحصائيات
+    systemStats.errors.push({
+      timestamp: new Date().toISOString(),
+      error: autoReplyError.message,
+      context: 'auto-reply'
+    });
   }
 }
 
@@ -323,14 +408,79 @@ async function findOrCreateConversation(customerId, pageId) {
   }
 }
 
-// 🏥 Health Check
+// إحصائيات النظام
+let systemStats = {
+  messagesReceived: 0,
+  messagesIgnored: 0,
+  lastMessageTime: null,
+  lastIgnoredMessage: null,
+  errors: [],
+  startTime: new Date()
+};
+
+// 🏥 Health Check المحسن
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
-    service: 'Facebook Webhook Server'
+    service: 'Facebook Webhook Server',
+    port: PORT,
+    messagesReceived: systemStats.messagesReceived,
+    messagesIgnored: systemStats.messagesIgnored,
+    lastMessageTime: systemStats.lastMessageTime,
+    lastIgnoredMessage: systemStats.lastIgnoredMessage,
+    errors: systemStats.errors.slice(-10), // آخر 10 أخطاء
+    startTime: systemStats.startTime.toISOString(),
+    memory: process.memoryUsage(),
+    version: '2.1.0'
   });
+});
+
+// 📊 إحصائيات مفصلة
+app.get('/stats', (req, res) => {
+  res.status(200).json({
+    ...systemStats,
+    uptime: process.uptime(),
+    memory: process.memoryUsage(),
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 🧪 اختبار الـ Webhook
+app.post('/test', (req, res) => {
+  console.log('🧪 Test webhook called');
+
+  // محاكاة رسالة اختبار
+  const testMessage = {
+    object: 'page',
+    entry: [{
+      id: '260345600493273',
+      messaging: [{
+        sender: { id: 'test_user_' + Date.now() },
+        recipient: { id: '260345600493273' },
+        timestamp: Date.now(),
+        message: {
+          mid: `test_${Date.now()}`,
+          text: `🧪 رسالة اختبار من التشخيص - ${new Date().toLocaleTimeString('ar-EG')}`
+        }
+      }]
+    }]
+  };
+
+  // معالجة الرسالة
+  req.body = testMessage;
+
+  res.status(200).json({
+    success: true,
+    message: 'Test message processed',
+    timestamp: new Date().toISOString()
+  });
+
+  // معالجة الرسالة في الخلفية
+  setTimeout(() => {
+    processWebhookData(testMessage);
+  }, 100);
 });
 
 // 🚀 بدء الخادم

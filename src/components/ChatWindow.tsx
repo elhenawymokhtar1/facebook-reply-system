@@ -8,6 +8,8 @@ import { Send, User, Bot, MoreVertical, Phone, Video, Loader2, ImagePlus, CheckC
 import { useMessages } from "@/hooks/useMessages";
 import { useConversations } from "@/hooks/useConversations";
 import { GeminiTestButton } from "@/components/GeminiTestButton";
+import { getDisplayName } from "@/utils/nameUtils";
+import { frontendLogger } from "@/utils/frontendLogger";
 
 interface ChatWindowProps {
   conversationId: string;
@@ -21,13 +23,6 @@ const ChatWindow = ({ conversationId }: ChatWindowProps) => {
   const { conversations } = useConversations();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // تشخيص: طباعة معرف المحادثة والرسائل
-  console.log('🔍 [ChatWindow] Conversation ID:', conversationId);
-  console.log('🔍 [ChatWindow] Messages count:', messages?.length || 0);
-  console.log('🔍 [ChatWindow] Messages:', messages);
-  console.log('🔍 [ChatWindow] Loading:', isLoading);
-  console.log('🔍 [ChatWindow] Error:', error);
 
   const conversation = conversations.find(c => c && c.id === conversationId) ||
     (conversationId && conversationId.startsWith('test-') ? {
@@ -155,9 +150,12 @@ const ChatWindow = ({ conversationId }: ChatWindowProps) => {
             </div>
             <div>
               <h3 className="font-medium text-gray-900">
-                {conversation.customer_name.startsWith('User ')
-                  ? `عميل ${conversation.customer_facebook_id.slice(-6)}`
-                  : conversation.customer_name}
+                {getDisplayName(
+                  conversation.customer_name,
+                  conversation.customer_facebook_id,
+                  conversation.id,
+                  conversation.page_name
+                )}
               </h3>
               <div className="flex flex-col space-y-1">
                 <p className="text-sm text-green-600">
@@ -381,7 +379,18 @@ const ChatWindow = ({ conversationId }: ChatWindowProps) => {
           </Button>
 
           <Button
-            onClick={handleSendMessage}
+            onClick={() => {
+              const buttonData = {
+                messageLength: message.trim().length,
+                hasImage: !!selectedImage,
+                isPending: sendMessage.isPending,
+                isDisabled: (!message.trim() && !selectedImage) || sendMessage.isPending,
+                conversationId: conversationId
+              };
+
+              frontendLogger.buttonClick('Send Message Button', buttonData);
+              handleSendMessage();
+            }}
             disabled={(!message.trim() && !selectedImage) || sendMessage.isPending}
             className="bg-blue-500 hover:bg-blue-600 px-4"
           >

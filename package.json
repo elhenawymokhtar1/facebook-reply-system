@@ -12,7 +12,9 @@
     "webhook": "node webhook-server.js",
     "api": "tsx src/api/server.ts",
     "image-server": "tsx src/api/image-server.ts",
-    "start:all": "concurrently \"npm run dev\" \"npm run webhook\" \"npm run api\""
+    "start:all": "concurrently \"npm run dev\" \"npm run webhook\" \"npm run api\"",
+    "test:webhook": "node test-webhook-diagnostics.js",
+    "diagnose": "node test-webhook-diagnostics.js"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -47,6 +49,7 @@
     "@tanstack/react-query": "^5.56.2",
     "@types/cors": "^2.8.18",
     "@vercel/node": "^5.1.16",
+    "axios": "^1.9.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.0",

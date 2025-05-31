@@ -1,6 +1,11 @@
-import { supabase } from "@/integrations/supabase/client";
+import { createClient } from '@supabase/supabase-js';
 import { OrderService, CustomerInfo } from './orderService';
 import { ProductImageService } from './productImageService';
+
+// إعداد Supabase
+const supabaseUrl = 'https://ddwszecfsfkjnahesymm.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRkd3N6ZWNmc2Zram5haGVzeW1tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzMDc2MDYsImV4cCI6MjA2Mzg4MzYwNn0.5jo4tgLAMqwVnYkhUYBa3WrNxann8xBqkNzba8DaCMg';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
 export interface GeminiSettings {
   api_key: string;
@@ -207,10 +212,12 @@ export class GeminiAiService {
     }
   }
 
-  // حفظ إعدادات Gemini في قاعدة البيانات
+  // حفظ إعدادات Gemini في قاعدة البيانات مباشرة
   static async saveGeminiSettings(settings: Partial<GeminiSettings>): Promise<void> {
     try {
-      // أولاً: محاولة الحصول على السجل الموجود
+      console.log('💾 Saving Gemini settings to database...');
+
+      // التحقق من وجود سجل موجود
       const { data: existingSettings } = await supabase
         .from('gemini_settings')
         .select('id')
@@ -220,34 +227,40 @@ export class GeminiAiService {
 
       if (existingSettings) {
         // تحديث السجل الموجود
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('gemini_settings')
           .update({
             ...settings,
             updated_at: new Date().toISOString()
           })
-          .eq('id', existingSettings.id);
+          .eq('id', existingSettings.id)
+          .select()
+          .single();
 
         if (error) {
           throw error;
         }
+
         console.log('✅ Gemini settings updated successfully');
       } else {
         // إنشاء سجل جديد
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('gemini_settings')
           .insert({
             ...settings,
             updated_at: new Date().toISOString()
-          });
+          })
+          .select()
+          .single();
 
         if (error) {
           throw error;
         }
+
         console.log('✅ Gemini settings created successfully');
       }
     } catch (error) {
-      console.error('Error saving Gemini settings:', error);
+      console.error('Error saving Gemini settings to database:', error);
       throw error;
     }
   }
@@ -307,6 +320,14 @@ export class GeminiAiService {
       if (!geminiResponse.success || !geminiResponse.response) {
         console.error('Failed to generate Gemini response:', geminiResponse.error);
         return false;
+      }
+
+      // أولاً: محاولة إرسال كتالوج المنتجات الجديد
+      const catalogSent = await this.checkAndSendProductCatalog(conversationId, userMessage);
+
+      // إذا لم يتم إرسال كتالوج، جرب النظام القديم للصور
+      if (!catalogSent) {
+        await this.checkAndSendProductImage(conversationId, userMessage);
       }
 
       // تحليل المحادثة للبحث عن طلب محتمل
@@ -703,7 +724,91 @@ export class GeminiAiService {
     }
   }
 
-  // التحقق من طلبات الصور وإرسالها
+  // البحث في المنتجات وإرسال كتالوج ذكي
+  static async checkAndSendProductCatalog(conversationId: string, userMessage: string): Promise<boolean> {
+    try {
+      // اكتشاف طلب المنتجات
+      const isProductRequest = this.isProductRequest(userMessage);
+      if (!isProductRequest) {
+        return false;
+      }
+
+      console.log('🛍️ Product request detected:', userMessage);
+
+      // استخراج اللون أو الفئة المطلوبة
+      const requestedColor = this.detectColorInText(userMessage);
+      const requestedCategory = this.detectCategoryInText(userMessage);
+
+      console.log('🎨 Detected color:', requestedColor);
+      console.log('📦 Detected category:', requestedCategory);
+
+      // البحث في المنتجات (النظام الجديد أولاً)
+      let products = [];
+
+      if (requestedColor) {
+        // جرب النظام الجديد أولاً
+        products = await searchProductsVariants(requestedColor);
+        // إذا لم نجد نتائج، جرب النظام القديم
+        if (products.length === 0) {
+          products = await searchProducts(requestedColor);
+        }
+      } else if (requestedCategory) {
+        products = await searchProductsVariants(requestedCategory);
+        if (products.length === 0) {
+          products = await searchProducts(requestedCategory);
+        }
+      } else {
+        // جلب المنتجات المتاحة من النظام الجديد
+        try {
+          const response = await fetch('http://localhost:3002/api/products-variants');
+          if (response.ok) {
+            const productsWithVariants = await response.json();
+            // تحويل إلى تنسيق مبسط للعرض
+            products = productsWithVariants.flatMap(product =>
+              product.variants
+                .filter(v => v.is_available && v.stock_quantity > 0)
+                .map(variant => ({
+                  product_id: product.id,
+                  product_name: product.name,
+                  description: product.description,
+                  category: product.category,
+                  color: variant.color,
+                  size: variant.size,
+                  price: variant.price,
+                  stock_quantity: variant.stock_quantity,
+                  image_url: variant.image_url
+                }))
+            );
+          }
+        } catch (error) {
+          console.error('Error fetching products variants:', error);
+          // fallback للنظام القديم
+          const response = await fetch('http://localhost:3002/api/products/available');
+          if (response.ok) {
+            products = await response.json();
+          }
+        }
+      }
+
+      if (products.length === 0) {
+        console.log('❌ No products found');
+        await this.sendNoProductsMessage(conversationId, requestedColor, requestedCategory);
+        return true;
+      }
+
+      console.log(`✅ Found ${products.length} products`);
+
+      // إرسال كتالوج المنتجات
+      await this.sendProductCatalog(conversationId, products, requestedColor, requestedCategory);
+      return true;
+
+    } catch (error) {
+      console.error('Error checking and sending product catalog:', error);
+      return false;
+    }
+  }
+
+  // التحقق من طلبات الصور وإرسالها (النظام القديم كـ fallback)
   static async checkAndSendProductImage(conversationId: string, userMessage: string): Promise<void> {
     try {
       // التحقق من وجود طلب صورة
@@ -1272,6 +1377,156 @@ ${fullImageUrl}
     } catch (error) {
       console.error('Error getting correct page settings:', error);
       return null;
+    }
+  }
+
+  // 🛍️ دوال نظام المنتجات الجديد
+
+  // التحقق من طلب المنتجات
+  static isProductRequest(message: string): boolean {
+    const productKeywords = [
+      'عايز', 'عايزة', 'محتاج', 'محتاجة', 'أريد', 'اريد',
+      'عندكم', 'متوفر', 'موجود', 'في', 'ايه',
+      'حذاء', 'كوتشي', 'شوز', 'سنيكرز', 'منتج', 'منتجات',
+      'أبيض', 'أسود', 'أحمر', 'أزرق', 'بني', 'بيج', 'جملي',
+      'رياضي', 'كلاسيك', 'كاجوال', 'رسمي',
+      'صورة', 'شوف', 'اشوف', 'كتالوج', 'أسعار'
+    ];
+
+    return productKeywords.some(keyword =>
+      message.toLowerCase().includes(keyword.toLowerCase())
+    );
+  }
+
+  // اكتشاف اللون في النص
+  static detectColorInText(message: string): string | null {
+    const colors = [
+      'أبيض', 'أسود', 'أحمر', 'أزرق', 'أخضر', 'أصفر',
+      'بني', 'بيج', 'جملي', 'وردي', 'بنفسجي', 'رمادي',
+      'ذهبي', 'فضي', 'برتقالي'
+    ];
+
+    for (const color of colors) {
+      if (message.includes(color)) {
+        return color;
+      }
+    }
+    return null;
+  }
+
+  // اكتشاف الفئة في النص
+  static detectCategoryInText(message: string): string | null {
+    const categories = [
+      'رياضي', 'كلاسيك', 'كاجوال', 'رسمي', 'عادي'
+    ];
+
+    for (const category of categories) {
+      if (message.includes(category)) {
+        return category;
+      }
+    }
+    return null;
+  }
+
+  // إرسال كتالوج المنتجات (محدث للنظام الجديد)
+  static async sendProductCatalog(conversationId: string, products: any[], requestedColor?: string, requestedCategory?: string): Promise<void> {
+    try {
+      // تجميع المنتجات حسب الفئة
+      const groupedProducts = products.reduce((acc, product) => {
+        const category = product.category;
+        if (!acc[category]) {
+          acc[category] = [];
+        }
+        acc[category].push(product);
+        return acc;
+      }, {});
+
+      // إنشاء رسالة الكتالوج
+      let catalogMessage = '';
+
+      if (requestedColor) {
+        catalogMessage = `🎨 المنتجات المتاحة باللون ${requestedColor}:\n\n`;
+      } else if (requestedCategory) {
+        catalogMessage = `📦 المنتجات في فئة ${requestedCategory}:\n\n`;
+      } else {
+        catalogMessage = `🛍️ منتجاتنا المتاحة:\n\n`;
+      }
+
+      // إضافة المنتجات للرسالة
+      Object.entries(groupedProducts).forEach(([category, categoryProducts]: [string, any]) => {
+        catalogMessage += `📂 ${category}:\n`;
+
+        categoryProducts.slice(0, 5).forEach((product: any) => {
+          // التعامل مع النظام الجديد (مع المقاسات) والقديم
+          if (product.size) {
+            // النظام الجديد - مع المقاسات
+            catalogMessage += `• ${product.product_name || product.name}\n`;
+            catalogMessage += `  🎨 ${product.color} - 📏 مقاس ${product.size}\n`;
+            catalogMessage += `  💰 ${product.price} جنيه\n`;
+            if (product.stock_quantity) {
+              catalogMessage += `  📦 متوفر: ${product.stock_quantity} قطعة\n`;
+            }
+          } else {
+            // النظام القديم - بدون مقاسات
+            catalogMessage += `• ${product.name}\n`;
+            catalogMessage += `  💰 ${product.price} جنيه\n`;
+            if (product.description) {
+              catalogMessage += `  📝 ${product.description.substring(0, 50)}...\n`;
+            }
+          }
+          catalogMessage += `\n`;
+        });
+
+        if (categoryProducts.length > 5) {
+          catalogMessage += `  ... و ${categoryProducts.length - 5} منتجات أخرى\n\n`;
+        }
+      });
+
+      catalogMessage += `💬 عايز تشوف تفاصيل أي منتج؟ قولي اسمه أو لونه وهبعتلك صورته! 😊`;
+
+      // إرسال الرسالة
+      await this.sendMessageToCustomer(conversationId, catalogMessage);
+
+      // إرسال صور لأول 3 منتجات
+      const topProducts = products.slice(0, 3);
+      for (const product of topProducts) {
+        if (product.image_url) {
+          const productName = product.product_name || product.name;
+          const productDetails = product.size ?
+            `${productName} - ${product.color} مقاس ${product.size} - ${product.price} جنيه` :
+            `${productName} - ${product.price} جنيه`;
+
+          await this.sendImageToCustomer(
+            conversationId,
+            productDetails,
+            product.image_url
+          );
+        }
+      }
+
+    } catch (error) {
+      console.error('Error sending product catalog:', error);
+    }
+  }
+
+  // إرسال رسالة عدم وجود منتجات
+  static async sendNoProductsMessage(conversationId: string, requestedColor?: string, requestedCategory?: string): Promise<void> {
+    try {
+      let message = '';
+
+      if (requestedColor) {
+        message = `آسف! 😔 مش متوفر منتجات باللون ${requestedColor} حالياً.\n\n`;
+      } else if (requestedCategory) {
+        message = `آسف! 😔 مش متوفر منتجات في فئة ${requestedCategory} حالياً.\n\n`;
+      } else {
+        message = `آسف! 😔 مش متوفر منتجات حالياً.\n\n`;
+      }
+
+      message += `بس عندنا منتجات تانية جميلة! عايز تشوف إيه المتاح؟ 😊`;
+
+      await this.sendMessageToCustomer(conversationId, message);
+    } catch (error) {
+      console.error('Error sending no products message:', error);
     }
   }
 

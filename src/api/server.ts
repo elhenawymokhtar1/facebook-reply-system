@@ -4,25 +4,25 @@ import express from 'express';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
 import { NameUpdateService } from '@/services/nameUpdateService';
-import { processIncomingMessage, validateMessageRequest } from './process-message';
+// import { processIncomingMessage, validateMessageRequest } from './process-message';
 import colorsRouter from './colors';
+import geminiRouter from './gemini-routes';
+import { forceUpdateAllUserNames } from '@/services/forceUpdateNames';
 
 // تحميل متغيرات البيئة
 dotenv.config();
 
+// إعداد Supabase
+const supabaseUrl = 'https://ddwszecfsfkjnahesymm.supabase.co';
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRkd3N6ZWNmc2Zram5haGVzeW1tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzMDc2MDYsImV4cCI6MjA2Mzg4MzYwNn0.5jo4tgLAMqwVnYkhUYBa3WrNxann8xBqkNzba8DaCMg';
+const supabase = createClient(supabaseUrl, supabaseKey);
+
 const app = express();
 const PORT = 3002; // منفذ منفصل للـ API
 
-// Middleware
+// Middleware - CORS مفتوح للاختبار
 app.use(cors({
-  origin: [
-    'http://localhost:8080',
-    'http://localhost:8081',
-    'http://localhost:8082',
-    'http://localhost:8083',
-    'file://', // دعم للملفات المحلية
-    null // دعم للطلبات بدون origin
-  ],
+  origin: true, // السماح لجميع الـ origins
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -36,12 +36,805 @@ app.use((req, res, next) => {
   next();
 });
 
+
+
 // Colors management routes
 app.use('/api/colors', colorsRouter);
 
-const supabaseUrl = 'https://ddwszecfsfkjnahesymm.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRkd3N6ZWNmc2Zram5haGVzeW1tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzMDc2MDYsImV4cCI6MjA2Mzg4MzYwNn0.5jo4tgLAMqwVnYkhUYBa3WrNxann8xBqkNzba8DaCMg';
-const supabase = createClient(supabaseUrl, supabaseKey);
+console.log('🤖 Setting up Gemini AI routes...');
+
+// Test endpoint for debugging
+app.post('/api/debug-test', (req, res) => {
+  console.log('🔥🔥🔥 DEBUG TEST ENDPOINT HIT! 🔥🔥🔥');
+  console.log('📝 Body:', req.body);
+  res.json({ success: true, message: 'Debug test endpoint working!', timestamp: new Date().toISOString() });
+});
+
+// Gemini AI routes - مباشرة في الـ server
+app.get('/api/gemini/test', (req, res) => {
+  console.log('🧪 Gemini test route called!');
+  res.json({ message: 'Gemini API is working!' });
+});
+
+app.get('/api/gemini/settings', async (req, res) => {
+  try {
+    console.log('🤖 Fetching Gemini settings...');
+
+    const { data, error } = await supabase
+      .from('gemini_settings')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+      console.error('Error fetching Gemini settings:', error);
+      return res.status(500).json({ error: 'Failed to fetch Gemini settings' });
+    }
+
+    if (!data) {
+      console.log('⚠️ No Gemini settings found, returning defaults');
+      return res.json({
+        api_key: '',
+        model: 'gemini-1.5-flash',
+        prompt_template: '',
+        is_enabled: false,
+        max_tokens: 1000,
+        temperature: 0.7
+      });
+    }
+
+    console.log('✅ Gemini settings found:', {
+      model: data.model,
+      is_enabled: data.is_enabled,
+      hasApiKey: !!data.api_key
+    });
+
+    res.json(data);
+  } catch (error) {
+    console.error('Error in GET /api/gemini/settings:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/gemini/settings', async (req, res) => {
+  try {
+    console.log('🤖 Saving Gemini settings...');
+    const settings = req.body;
+
+    // التحقق من وجود سجل موجود
+    const { data: existingSettings } = await supabase
+      .from('gemini_settings')
+      .select('id')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (existingSettings) {
+      // تحديث السجل الموجود
+      const { data, error } = await supabase
+        .from('gemini_settings')
+        .update({
+          ...settings,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingSettings.id)
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('✅ Gemini settings updated successfully');
+      res.json(data);
+    } else {
+      // إنشاء سجل جديد
+      const { data, error } = await supabase
+        .from('gemini_settings')
+        .insert({
+          ...settings,
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('✅ Gemini settings created successfully');
+      res.json(data);
+    }
+  } catch (error) {
+    console.error('Error in POST /api/gemini/settings:', error);
+    res.status(500).json({ error: 'Failed to save Gemini settings' });
+  }
+});
+
+app.post('/api/gemini/test', async (req, res) => {
+  try {
+    console.log('🧪 Testing Gemini connection...');
+    const { api_key } = req.body;
+
+    if (!api_key) {
+      return res.status(400).json({ error: 'API key is required' });
+    }
+
+    // اختبار الاتصال مع Gemini
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${api_key}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: 'مرحبا، هذا اختبار للاتصال'
+          }]
+        }],
+        generationConfig: {
+          temperature: 0.7,
+          maxOutputTokens: 100
+        }
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      console.error('❌ Gemini API test failed:', errorData);
+      return res.status(400).json({
+        success: false,
+        error: errorData.error?.message || 'Failed to connect to Gemini API'
+      });
+    }
+
+    const data = await response.json();
+    console.log('✅ Gemini API test successful');
+
+    res.json({
+      success: true,
+      message: 'Connection successful',
+      response: data.candidates?.[0]?.content?.parts?.[0]?.text || 'Test response received'
+    });
+  } catch (error) {
+    console.error('Error in POST /api/gemini/test:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Internal server error during test'
+    });
+  }
+});
+
+console.log('🔧 Setting up Categories API routes...');
+
+// Test route
+app.get('/api/test-categories', (req, res) => {
+  console.log('🧪 Test Categories API called!');
+  res.json({ message: 'Categories API is working!' });
+});
+
+// Test Gemini route (moved here)
+app.get('/api/gemini/test-route-2', (req, res) => {
+  console.log('🧪 Test Gemini route 2 called!');
+  res.json({ message: 'Gemini API is working from here!' });
+});
+
+// Categories API
+app.get('/api/categories', async (req, res) => {
+  console.log('📋 Categories API called!');
+  try {
+    const { data: categories, error } = await supabase
+      .from('product_categories')
+      .select('*')
+      .order('sort_order', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching categories:', error);
+      return res.status(500).json({ error: 'Failed to fetch categories' });
+    }
+
+    res.json(categories || []);
+  } catch (error) {
+    console.error('Error in GET /categories:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/categories/active', async (req, res) => {
+  try {
+    const { data: categories, error } = await supabase
+      .from('product_categories')
+      .select('*')
+      .eq('is_active', true)
+      .order('sort_order', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching active categories:', error);
+      return res.status(500).json({ error: 'Failed to fetch active categories' });
+    }
+
+    res.json(categories || []);
+  } catch (error) {
+    console.error('Error in GET /categories/active:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/categories', async (req, res) => {
+  try {
+    const { name, description, icon, color, sort_order } = req.body;
+
+    if (!name) {
+      return res.status(400).json({
+        error: 'Missing required field: name'
+      });
+    }
+
+    const categoryData = {
+      name: name.trim(),
+      description: description?.trim() || '',
+      icon: icon?.trim() || 'package',
+      color: color?.trim() || 'blue',
+      sort_order: parseInt(sort_order) || 0,
+      is_active: true
+    };
+
+    const { data: category, error } = await supabase
+      .from('product_categories')
+      .insert(categoryData)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error creating category:', error);
+      return res.status(500).json({ error: 'Failed to create category' });
+    }
+
+    console.log('✅ Category created successfully:', category.name);
+    res.status(201).json(category);
+  } catch (error) {
+    console.error('Error in POST /categories:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.delete('/api/categories/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { error } = await supabase
+      .from('product_categories')
+      .delete()
+      .eq('id', id);
+
+    if (error) {
+      console.error('Error deleting category:', error);
+      return res.status(500).json({ error: 'Failed to delete category' });
+    }
+
+    console.log('✅ Category deleted successfully');
+    res.json({ message: 'Category deleted successfully' });
+  } catch (error) {
+    console.error('Error in DELETE /categories:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Products with variants API
+app.get('/api/products-variants', async (req, res) => {
+  try {
+    const { data: products, error } = await supabase
+      .from('products_with_variants')
+      .select('*')
+      .order('product_created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching products with variants:', error);
+      return res.status(500).json({ error: 'Failed to fetch products' });
+    }
+
+    res.json(products || []);
+  } catch (error) {
+    console.error('Error in GET /products-variants:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/products-variants', async (req, res) => {
+  try {
+    const { name, description, category, base_price, brand, variants } = req.body;
+
+    if (!name || !category || !base_price || !variants || variants.length === 0) {
+      return res.status(400).json({
+        error: 'Missing required fields: name, category, base_price, variants'
+      });
+    }
+
+    // إضافة المنتج الأساسي
+    const { data: product, error: productError } = await supabase
+      .from('products_base')
+      .insert({
+        name: name.trim(),
+        description: description?.trim() || '',
+        category: category.trim(),
+        base_price: parseFloat(base_price),
+        brand: brand?.trim() || null
+      })
+      .select()
+      .single();
+
+    if (productError) {
+      console.error('Error creating product:', productError);
+      return res.status(500).json({ error: 'Failed to create product' });
+    }
+
+    // إضافة المتغيرات
+    const variantData = variants.map(variant => ({
+      product_id: product.id,
+      color: variant.color.trim(),
+      size: variant.size.trim(),
+      price: parseFloat(variant.price),
+      stock_quantity: parseInt(variant.stock_quantity) || 0,
+      image_url: variant.image_url?.trim() || null
+    }));
+
+    const { error: variantsError } = await supabase
+      .from('product_variants')
+      .insert(variantData);
+
+    if (variantsError) {
+      console.error('Error creating variants:', variantsError);
+      // حذف المنتج إذا فشل إنشاء المتغيرات
+      await supabase.from('products_base').delete().eq('id', product.id);
+      return res.status(500).json({ error: 'Failed to create product variants' });
+    }
+
+    console.log('✅ Product with variants created successfully:', product.name);
+    res.status(201).json({ ...product, variants: variantData });
+  } catch (error) {
+    console.error('Error in POST /products-variants:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.delete('/api/products-variants/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // حذف المتغيرات أولاً
+    const { error: variantsError } = await supabase
+      .from('product_variants')
+      .delete()
+      .eq('product_id', id);
+
+    if (variantsError) {
+      console.error('Error deleting variants:', variantsError);
+      return res.status(500).json({ error: 'Failed to delete product variants' });
+    }
+
+    // حذف المنتج
+    const { error: productError } = await supabase
+      .from('products_base')
+      .delete()
+      .eq('id', id);
+
+    if (productError) {
+      console.error('Error deleting product:', productError);
+      return res.status(500).json({ error: 'Failed to delete product' });
+    }
+
+    console.log('✅ Product deleted successfully');
+    res.json({ message: 'Product deleted successfully' });
+  } catch (error) {
+    console.error('Error in DELETE /products-variants:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Facebook settings endpoints
+app.get('/api/facebook/settings', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('facebook_settings')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      throw error;
+    }
+
+    res.json(data || []);
+  } catch (error) {
+    console.error('Error fetching Facebook settings:', error);
+    res.status(500).json({ error: 'Failed to fetch Facebook settings' });
+  }
+});
+
+// 🔧 تفعيل/إيقاف صفحة Facebook
+app.post('/api/facebook/toggle/:pageId', async (req, res) => {
+  try {
+    const { pageId } = req.params;
+    const { action } = req.body; // 'activate' or 'deactivate'
+
+    console.log(`🔧 ${action === 'activate' ? 'تفعيل' : 'إيقاف'} صفحة: ${pageId}`);
+
+    const isActive = action === 'activate';
+    const webhookEnabled = action === 'activate';
+
+    const { data: updatedPage, error } = await supabase
+      .from('facebook_settings')
+      .update({
+        is_active: isActive,
+        webhook_enabled: webhookEnabled,
+        updated_at: new Date().toISOString()
+      })
+      .eq('page_id', pageId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error toggling page:', error);
+      return res.status(500).json({ error: 'Failed to toggle page' });
+    }
+
+    if (!updatedPage) {
+      return res.status(404).json({ error: 'Page not found' });
+    }
+
+    console.log(`✅ تم ${action === 'activate' ? 'تفعيل' : 'إيقاف'} صفحة ${updatedPage.page_name} بنجاح`);
+
+    res.json({
+      success: true,
+      message: `تم ${action === 'activate' ? 'تفعيل' : 'إيقاف'} الصفحة بنجاح`,
+      page: updatedPage
+    });
+
+  } catch (error) {
+    console.error('Error in toggle page:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// 🔧 تحكم في Webhook للصفحة
+app.post('/api/facebook/webhook/:pageId', async (req, res) => {
+  try {
+    const { pageId } = req.params;
+    const { enabled } = req.body; // true or false
+
+    console.log(`🔧 ${enabled ? 'تفعيل' : 'إيقاف'} webhook للصفحة: ${pageId}`);
+
+    const { data: updatedPage, error } = await supabase
+      .from('facebook_settings')
+      .update({
+        webhook_enabled: enabled,
+        updated_at: new Date().toISOString()
+      })
+      .eq('page_id', pageId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error('Error updating webhook status:', error);
+      return res.status(500).json({ error: 'Failed to update webhook status' });
+    }
+
+    if (!updatedPage) {
+      return res.status(404).json({ error: 'Page not found' });
+    }
+
+    console.log(`✅ تم ${enabled ? 'تفعيل' : 'إيقاف'} webhook للصفحة ${updatedPage.page_name} بنجاح`);
+
+    res.json({
+      success: true,
+      message: `تم ${enabled ? 'تفعيل' : 'إيقاف'} webhook بنجاح`,
+      page: updatedPage
+    });
+
+  } catch (error) {
+    console.error('Error in webhook control:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// قطع الاتصال مع صفحة - مع التحكم الذكي
+app.post('/api/facebook/disconnect/:pageId', async (req, res) => {
+  try {
+    const { pageId } = req.params;
+
+    console.log(`🔌 قطع الاتصال مع الصفحة: ${pageId}`);
+
+    // جلب الـ Access Token الحالي
+    const { data: currentSettings, error: fetchError } = await supabase
+      .from('facebook_settings')
+      .select('access_token, page_name')
+      .eq('page_id', pageId)
+      .single();
+
+    if (fetchError) {
+      throw new Error(`خطأ في جلب إعدادات الصفحة: ${fetchError.message}`);
+    }
+
+    // قطع الاتصال مع إيقاف الـ webhook
+    const { error } = await supabase
+      .from('facebook_settings')
+      .update({
+        is_active: false,
+        webhook_enabled: false, // إيقاف الـ webhook فور سؤال
+        disconnected_at: new Date().toISOString(),
+        backup_access_token: currentSettings.access_token,
+        access_token: null
+      })
+      .eq('page_id', pageId);
+
+    if (error) {
+      throw error;
+    }
+
+    console.log(`✅ تم قطع الاتصال مع صفحة ${currentSettings.page_name} وإيقاف الـ webhook`);
+
+    res.json({
+      success: true,
+      message: 'تم قطع الاتصال وإيقاف الـ webhook بنجاح',
+      pageId,
+      pageName: currentSettings.page_name
+    });
+  } catch (error) {
+    console.error('Error disconnecting page:', error);
+    res.status(500).json({ error: error.message || 'Failed to disconnect page' });
+  }
+});
+
+// إعادة تفعيل صفحة - مع التحكم الذكي
+app.post('/api/facebook/reactivate/:pageId', async (req, res) => {
+  try {
+    const { pageId } = req.params;
+
+    console.log(`🔄 إعادة تفعيل الصفحة: ${pageId}`);
+
+    // جلب الـ Access Token المحفوظ
+    const { data: currentSettings, error: fetchError } = await supabase
+      .from('facebook_settings')
+      .select('backup_access_token, page_name')
+      .eq('page_id', pageId)
+      .single();
+
+    if (fetchError) {
+      throw new Error(`خطأ في جلب إعدادات الصفحة: ${fetchError.message}`);
+    }
+
+    if (!currentSettings.backup_access_token) {
+      throw new Error('لا يوجد Access Token محفوظ لهذه الصفحة. يرجى إعادة ربط الصفحة.');
+    }
+
+    // إعادة التفعيل مع تشغيل الـ webhook
+    const { error } = await supabase
+      .from('facebook_settings')
+      .update({
+        is_active: true,
+        webhook_enabled: true, // تشغيل الـ webhook تلقائ سؤال
+        disconnected_at: null,
+        access_token: currentSettings.backup_access_token,
+        backup_access_token: null
+      })
+      .eq('page_id', pageId);
+
+    if (error) {
+      throw error;
+    }
+
+    console.log(`✅ تم إعادة تفعيل صفحة ${currentSettings.page_name} وتشغيل الـ webhook`);
+
+    res.json({
+      success: true,
+      message: 'تم إعادة التفعيل وتشغيل الـ webhook بنجاح',
+      pageId,
+      pageName: currentSettings.page_name
+    });
+  } catch (error) {
+    console.error('Error reactivating page:', error);
+    res.status(500).json({ error: error.message || 'Failed to reactivate page' });
+  }
+});
+
+// حذف صفحة نهائياً مع تنظيف شامل
+app.delete('/api/facebook/delete/:pageId', async (req, res) => {
+  try {
+    const { pageId } = req.params;
+    console.log(`🗑️ Starting complete deletion of page: ${pageId}`);
+
+    // 1. حذف إعدادات الصفحة
+    const { error: settingsError } = await supabase
+      .from('facebook_settings')
+      .delete()
+      .eq('page_id', pageId);
+
+    if (settingsError) {
+      console.error('❌ Error deleting page settings:', settingsError);
+      throw settingsError;
+    }
+    console.log('✅ Page settings deleted');
+
+    // 2. جلب معرفات المحادثات للصفحة
+    const { data: pageConversations, error: fetchConversationsError } = await supabase
+      .from('conversations')
+      .select('id')
+      .eq('facebook_page_id', pageId);
+
+    if (fetchConversationsError) {
+      console.error('❌ Error fetching conversations:', fetchConversationsError);
+    }
+
+    // حذف جميع الرسائل المرتبطة بالصفحة
+    if (pageConversations && pageConversations.length > 0) {
+      const conversationIds = pageConversations.map(c => c.id);
+      const { error: messagesError } = await supabase
+        .from('messages')
+        .delete()
+        .in('conversation_id', conversationIds);
+
+      if (messagesError) {
+        console.error('❌ Error deleting messages:', messagesError);
+      } else {
+        console.log(`✅ All messages deleted for ${conversationIds.length} conversations`);
+      }
+    }
+
+    // 3. حذف جميع المحادثات المرتبطة بالصفحة
+    const { error: conversationsError } = await supabase
+      .from('conversations')
+      .delete()
+      .eq('facebook_page_id', pageId);
+
+    if (conversationsError) {
+      console.error('❌ Error deleting conversations:', conversationsError);
+    } else {
+      console.log('✅ All conversations deleted');
+    }
+
+    console.log(`🎉 Complete deletion of page ${pageId} finished`);
+    res.json({
+      success: true,
+      message: 'تم حذف الصفحة وجميع البيانات المرتبطة بها بنجاح',
+      pageId: pageId
+    });
+  } catch (error) {
+    console.error('❌ Error in complete page deletion:', error);
+    res.status(500).json({ error: error.message || 'Failed to delete page completely' });
+  }
+});
+
+// تنظيف شامل للنظام - حذف جميع الصفحات التجريبية
+app.post('/api/facebook/cleanup-system', async (req, res) => {
+  try {
+    console.log('🧹 Starting complete system cleanup...');
+
+    // 1. حذف جميع الصفحات التجريبية
+    const testPageIds = [
+      'TEST_PAGE', 'DIRECT_TEST_PAGE', 'FINAL_TEST_PAGE', 'FINAL_TEST_PAGE_NEW',
+      'FIXED_TEST_PAGE', 'PAGE_ID', 'test', 'TEST_PAGE_FINAL', 'TEST_PAGE_FINAL2',
+      'TEST_PAGE_FINAL_FIXED', 'TEST_PAGE_FINAL_IMAGE', 'TEST_PAGE_FIXED',
+      'TEST_PAGE_IMAGE', 'TEST_PAGE_IMAGE_CLEAR', 'TEST_PAGE_NEW',
+      'TEST_PAGE_VISION', 'UPDATED_TEST_PAGE', '123'
+    ];
+
+    console.log(`🗑️ Deleting ${testPageIds.length} test pages...`);
+
+    // أولاً: جلب معرفات المحادثات للصفحات التجريبية
+    const { data: testConversations, error: fetchError } = await supabase
+      .from('conversations')
+      .select('id')
+      .in('facebook_page_id', testPageIds);
+
+    if (fetchError) {
+      console.error('❌ Error fetching test conversations:', fetchError);
+    }
+
+    // حذف الرسائل للمحادثات التجريبية
+    if (testConversations && testConversations.length > 0) {
+      const conversationIds = testConversations.map(c => c.id);
+      const { error: testMessagesError } = await supabase
+        .from('messages')
+        .delete()
+        .in('conversation_id', conversationIds);
+
+      if (testMessagesError) {
+        console.error('❌ Error deleting test messages:', testMessagesError);
+      } else {
+        console.log(`✅ Test messages deleted for ${conversationIds.length} conversations`);
+      }
+    }
+
+    // حذف المحادثات للصفحات التجريبية
+    const { error: testConversationsError } = await supabase
+      .from('conversations')
+      .delete()
+      .in('facebook_page_id', testPageIds);
+
+    if (testConversationsError) {
+      console.error('❌ Error deleting test conversations:', testConversationsError);
+    } else {
+      console.log('✅ Test conversations deleted');
+    }
+
+    console.log('🎉 System cleanup completed successfully');
+    res.json({
+      success: true,
+      message: 'تم تنظيف النظام بنجاح وحذف جميع الصفحات التجريبية',
+      deletedTestPages: testPageIds.length
+    });
+  } catch (error) {
+    console.error('❌ Error in system cleanup:', error);
+    res.status(500).json({ error: error.message || 'Failed to cleanup system' });
+  }
+});
+
+// إضافة صفحة Facebook جديدة مع إعدادات نظيفة
+app.post('/api/facebook/add-page', async (req, res) => {
+  try {
+    const { pageId, pageName, accessToken, webhookUrl } = req.body;
+
+    console.log(`➕ Adding new Facebook page: ${pageName} (${pageId})`);
+
+    // التحقق من البيانات المطلوبة
+    if (!pageId || !pageName || !accessToken) {
+      return res.status(400).json({
+        error: 'Missing required fields',
+        required: ['pageId', 'pageName', 'accessToken']
+      });
+    }
+
+    // التحقق من عدم وجود الصفحة مسبقاً
+    const { data: existingPage } = await supabase
+      .from('facebook_settings')
+      .select('page_id')
+      .eq('page_id', pageId)
+      .single();
+
+    if (existingPage) {
+      return res.status(409).json({
+        error: 'Page already exists',
+        message: 'هذه الصفحة موجودة بالفعل في النظام'
+      });
+    }
+
+    // إضافة الصفحة الجديدة مع تفعيل الـ webhook
+    const { data, error } = await supabase
+      .from('facebook_settings')
+      .insert({
+        page_id: pageId,
+        page_name: pageName,
+        access_token: accessToken,
+        webhook_url: webhookUrl || null,
+        is_active: true,
+        webhook_enabled: true, // تفعيل الـ webhook تلقائ سؤال
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error('❌ Error adding page:', error);
+      throw error;
+    }
+
+    console.log(`✅ Page added successfully: ${pageName}`);
+    res.json({
+      success: true,
+      message: 'تم إضافة الصفحة بنجاح',
+      page: {
+        id: data.id,
+        pageId: data.page_id,
+        pageName: data.page_name,
+        isActive: data.is_active
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error adding Facebook page:', error);
+    res.status(500).json({ error: error.message || 'Failed to add Facebook page' });
+  }
+});
 
 // Conversations endpoint
 app.get('/api/conversations', async (req, res) => {
@@ -68,7 +861,7 @@ app.get('/api/conversations', async (req, res) => {
     // جلب معلومات الصفحات
     const { data: pages, error: pagesError } = await supabase
       .from('facebook_settings')
-      .select('page_id, page_name, page_picture_url');
+      .select('page_id, page_name');
 
     if (pagesError) {
       console.error('Error fetching pages:', pagesError);
@@ -80,8 +873,7 @@ app.get('/api/conversations', async (req, res) => {
       console.log(`🔍 Conversation ${conversation.id}: facebook_page_id=${conversation.facebook_page_id}, found page: ${pageInfo?.page_name || 'NOT FOUND'}`);
       return {
         ...conversation,
-        page_name: pageInfo?.page_name,
-        page_picture_url: pageInfo?.page_picture_url
+        page_name: pageInfo?.page_name || 'صفحة غير معروفة'
       };
     }) || [];
 
@@ -117,11 +909,31 @@ app.get('/api/conversations/:id/messages', async (req, res) => {
 
 // Send message endpoint
 app.post('/api/conversations/:id/messages', async (req, res) => {
+  const startTime = Date.now();
+  const requestId = Math.random().toString(36).substr(2, 9);
+
   try {
     const { id } = req.params;
     const { content, sender_type, image_url } = req.body;
 
+    console.log(`📤 [${requestId}] START SENDING MESSAGE:`);
+    console.log(`   📋 Conversation ID: ${id}`);
+    console.log(`   📝 Content Length: ${content?.length || 0} chars`);
+    console.log(`   📝 Content Preview: "${content?.substring(0, 30)}${content?.length > 30 ? '...' : ''}"`);
+    console.log(`   👤 Sender Type: ${sender_type || 'admin'}`);
+    console.log(`   🖼️ Has Image: ${image_url ? 'YES' : 'NO'}`);
+
+    // التحقق من صحة البيانات
+    if (!content?.trim() && !image_url) {
+      console.log(`❌ [${requestId}] EMPTY MESSAGE - REJECTED`);
+      return res.status(400).json({
+        error: 'Message content or image is required',
+        requestId
+      });
+    }
+
     // Save message to database
+    console.log(`💾 [${requestId}] SAVING MESSAGE TO DATABASE...`);
     const { data, error } = await supabase
       .from('messages')
       .insert({
@@ -136,26 +948,67 @@ app.post('/api/conversations/:id/messages', async (req, res) => {
       .single();
 
     if (error) {
+      console.error(`❌ [${requestId}] DATABASE SAVE ERROR:`, error);
       throw error;
     }
 
+    console.log(`✅ [${requestId}] MESSAGE SAVED SUCCESSFULLY - ID: ${data.id}`);
+
     // Update conversation last message
-    await supabase
+    console.log(`🔄 [${requestId}] UPDATING CONVERSATION...`);
+    const { error: updateError } = await supabase
       .from('conversations')
       .update({
-        last_message: content,
+        last_message: content || '[IMAGE]',
         last_message_at: new Date().toISOString()
       })
       .eq('id', id);
 
-    res.json(data);
+    if (updateError) {
+      console.error(`⚠️ [${requestId}] CONVERSATION UPDATE ERROR:`, updateError);
+    } else {
+      console.log(`✅ [${requestId}] CONVERSATION UPDATED SUCCESSFULLY`);
+    }
+
+    const duration = Date.now() - startTime;
+    console.log(`🏁 [${requestId}] MESSAGE SENDING COMPLETED - Duration: ${duration}ms`);
+
+    res.json({
+      ...data,
+      requestId,
+      duration
+    });
   } catch (error) {
-    console.error('Error sending message:', error);
-    res.status(500).json({ error: 'Failed to send message' });
+    const duration = Date.now() - startTime;
+    console.error(`❌ [${requestId}] MESSAGE SENDING FAILED (${duration}ms):`, error);
+    res.status(500).json({
+      error: 'Failed to send message',
+      details: error.message,
+      requestId,
+      duration
+    });
   }
 });
 
 
+
+// Frontend logging endpoint - SIMPLE VERSION
+app.post('/api/frontend-log', (req, res) => {
+  console.log('🔥 FRONTEND LOG ENDPOINT HIT!');
+  console.log('📝 Body:', req.body);
+
+  const { level, message, data, timestamp, source } = req.body;
+  const logPrefix = level === 'error' ? '❌' : level === 'warn' ? '⚠️' : level === 'info' ? 'ℹ️' : '🔍';
+  const logMessage = `${logPrefix} [FRONTEND-${source || 'UNKNOWN'}] ${message}`;
+
+  if (data) {
+    console.log(logMessage, data);
+  } else {
+    console.log(logMessage);
+  }
+
+  res.json({ success: true });
+});
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -163,20 +1016,213 @@ app.get('/', (req, res) => {
     status: 'OK',
     service: 'Facebook Reply Automator API',
     webhook: '/api/process-message',
-    health: '/health'
+    health: '/health',
+    frontendLog: '/api/frontend-log'
   });
 });
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', service: 'Message Processing API' });
 });
+
+// Test endpoint
+app.post('/api/test-endpoint', (req, res) => {
+  console.log('🧪 TEST ENDPOINT HIT!');
+  console.log('📝 Body:', req.body);
+  res.json({ success: true, message: 'Test endpoint working!' });
+});
+
+
+
+// إرسال رسائل لفيسبوك (وسيط لتجنب مشاكل CORS)
+app.post('/api/facebook/send-message', async (req, res) => {
+  try {
+    const { access_token, recipient_id, message } = req.body;
+    
+    if (!access_token || !recipient_id || !message) {
+      return res.status(400).json({ 
+        error: 'Missing required parameters',
+        details: 'access_token, recipient_id, and message are required'
+      });
+    }
+
+    console.log('🔄 API Server: Forwarding message to Facebook...', {
+      recipientIdPreview: recipient_id.substring(0, 5) + '...',
+      messageLength: message.length
+    });
+
+    // إرسال الطلب إلى فيسبوك
+    const response = await fetch(
+      `https://graph.facebook.com/v21.0/me/messages?access_token=${access_token}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          recipient: { id: recipient_id },
+          message: { text: message },
+        }),
+      }
+    );
+
+    // التعامل مع الرد من فيسبوك
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Facebook API Error Details:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText,
+      });
+      return res.status(response.status).json({
+        error: 'Facebook API Error',
+        details: errorText
+      });
+    }
+
+    const data = await response.json();
+    console.log('✅ Message sent to Facebook successfully!');
+    return res.json(data);
+    
+  } catch (error) {
+    console.error('❌ Error in send-message endpoint:', error);
+    return res.status(500).json({
+      error: 'Failed to send message to Facebook',
+      details: error.message
+    });
+  }
+});
+
+// إرسال صور لفيسبوك (وسيط لتجنب مشاكل CORS)
+app.post('/api/facebook/send-image', async (req, res) => {
+  try {
+    const { access_token, recipient_id, image_url } = req.body;
+    
+    if (!access_token || !recipient_id || !image_url) {
+      return res.status(400).json({ 
+        error: 'Missing required parameters',
+        details: 'access_token, recipient_id, and image_url are required'
+      });
+    }
+
+    console.log('🔄 API Server: Forwarding image to Facebook...', {
+      recipientIdPreview: recipient_id.substring(0, 5) + '...',
+      imageUrl: image_url
+    });
+
+    // إرسال الطلب إلى فيسبوك
+    const response = await fetch(
+      `https://graph.facebook.com/v21.0/me/messages?access_token=${access_token}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          recipient: { id: recipient_id },
+          message: { 
+            attachment: {
+              type: 'image',
+              payload: {
+                url: image_url,
+                is_reusable: true
+              }
+            }
+          }
+        }),
+      }
+    );
+
+    // التعامل مع الرد من فيسبوك
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('❌ Facebook API Error Details:', {
+        status: response.status,
+        statusText: response.statusText,
+        body: errorText,
+      });
+      return res.status(response.status).json({
+        error: 'Facebook API Error',
+        details: errorText
+      });
+    }
+
+    const data = await response.json();
+    console.log('✅ Image sent to Facebook successfully!');
+    return res.json(data);
+    
+  } catch (error) {
+    console.error('❌ Error in send-image endpoint:', error);
+    return res.status(500).json({
+      error: 'Failed to send image to Facebook',
+      details: error.message
+    });
+  }
+});
+
+// الحصول على إعدادات صفحة فيسبوك
+app.get('/api/facebook/page-settings/:pageId', async (req, res) => {
+  try {
+    const { pageId } = req.params;
+    
+    if (!pageId) {
+      return res.status(400).json({
+        error: 'Missing page ID',
+        details: 'Page ID is required in the URL parameter'
+      });
+    }
+    
+    console.log('🔍 API Server: Getting Facebook page settings...', {
+      pageId
+    });
+    
+    // الحصول على إعدادات الصفحة من قاعدة البيانات
+    const { data, error } = await supabase
+      .from('facebook_settings')
+      .select('*')
+      .eq('page_id', pageId)
+      .single();
+    
+    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+      console.error('❌ API Server: Error fetching page settings:', error);
+      return res.status(500).json({
+        error: 'Database error',
+        details: error.message
+      });
+    }
+    
+    if (!data) {
+      console.log('⚠️ API Server: No settings found for page:', pageId);
+      return res.status(404).json({
+        error: 'Page settings not found',
+        details: `No settings found for page ID: ${pageId}`
+      });
+    }
+    
+    console.log('✅ API Server: Page settings retrieved successfully', {
+      pageId,
+      hasAccessToken: !!data.access_token
+    });
+    
+    return res.json(data);
+    
+  } catch (error) {
+    console.error('❌ Error in page-settings endpoint:', error);
+    return res.status(500).json({
+      error: 'Failed to get page settings',
+      details: error.message
+    });
+  }
+});
+
+
 
 // Webhook verification endpoint (for Facebook)
 app.get('/api/process-message', (req, res) => {
   const VERIFY_TOKEN = 'facebook_verify_token_123';
 
-  console.log('🔍 Webhook verification request:', {
+  console.log(' Webhook verification request:', {
     mode: req.query['hub.mode'],
     token: req.query['hub.verify_token'],
     challenge: req.query['hub.challenge']
@@ -211,9 +1257,25 @@ app.get('/api/process-message', (req, res) => {
 
 // Process message endpoint
 app.post('/api/process-message', async (req, res) => {
-  console.log('🚀 POST /api/process-message endpoint hit!');
+  console.log('🚀🚀🚀 POST /api/process-message endpoint hit! 🚀🚀🚀');
   console.log('📝 Headers:', JSON.stringify(req.headers));
   console.log('📝 Full Body:', JSON.stringify(req.body));
+
+  // إضافة try-catch للـ imports
+  try {
+    console.log('🔍 Testing imports...');
+    const { processIncomingMessage, validateMessageRequest } = await import('./process-message');
+    console.log('✅ Imports successful');
+    console.log('🔍 processIncomingMessage:', typeof processIncomingMessage);
+    console.log('🔍 validateMessageRequest:', typeof validateMessageRequest);
+  } catch (importError) {
+    console.error('❌ Import error:', importError);
+    return res.status(500).json({
+      success: false,
+      message: 'Import error: ' + importError.message
+    });
+  }
+
   try {
     console.log('📨 Received message processing request:', req.body);
     console.log('🔍 Request headers:', req.headers);
@@ -358,6 +1420,32 @@ app.post('/webhook', async (req, res) => {
       for (const entry of body.entry || []) {
         const pageId = entry.id;
 
+        // 🔍 فحص حالة الصفحة أولاً - التحكم الذكي
+        console.log(`🔍 Checking page status for: ${pageId}`);
+
+        const { data: pageSettings, error: pageError } = await supabase
+          .from('facebook_settings')
+          .select('page_id, page_name, is_active, webhook_enabled')
+          .eq('page_id', pageId)
+          .single();
+
+        if (pageError || !pageSettings) {
+          console.log(`⚠️ Page ${pageId} not found in system - ignoring all messages`);
+          continue; // تجاهل هذه الصفحة تمام سؤال
+        }
+
+        if (!pageSettings.is_active) {
+          console.log(`🔴 Page ${pageSettings.page_name} (${pageId}) is INACTIVE - ignoring messages`);
+          continue; // تجاهل الصفحة المعطلة
+        }
+
+        if (!pageSettings.webhook_enabled) {
+          console.log(`🔴 Page ${pageSettings.page_name} (${pageId}) has WEBHOOK DISABLED - ignoring messages`);
+          continue; // تجاهل الصفحة مع webhook معطل
+        }
+
+        console.log(`✅ Page ${pageSettings.page_name} (${pageId}) is ACTIVE and WEBHOOK ENABLED - processing messages`);
+
         // معالجة رسائل Messenger
         if (entry.messaging) {
           for (const messagingEvent of entry.messaging) {
@@ -467,6 +1555,51 @@ async function handlePageChange(change: any, pageId: string) {
     // يمكن إضافة رد آلي على التعليقات
   }
 }
+
+app.get('/api/force-update-names', async (req, res) => {
+  try {
+    console.log('🚀 بدء التحديث القسري للأسماء من واجهة API');
+
+    // تشغيل عملية تحديث جميع أسماء المستخدمين عند بدء الخادم
+    const results = await forceUpdateAllUserNames();
+
+    res.json({
+      success: true,
+      message: 'تم بدء عملية تحديث الأسماء بنجاح',
+      results
+    });
+  } catch (error) {
+    console.error('❌ خطأ في تنفيذ التحديث القسري للأسماء:', error);
+    res.status(500).json({
+      success: false,
+      message: 'حدث خطأ أثناء تحديث الأسماء',
+      error: error.message
+    });
+  }
+});
+
+// مسار API لتحديث الأسماء المفقودة فقط
+app.post('/api/force-update-names', async (req, res) => {
+  try {
+    const { onlyMissingNames = true } = req.body;
+    console.log(`🔄 تم استلام طلب لتحديث أسماء المستخدمين. تحديث الأسماء المفقودة فقط: ${onlyMissingNames}`);
+
+    // تشغيل عملية التحديث مع خيار تحديث الأسماء المفقودة فقط
+    const results = await forceUpdateAllUserNames(onlyMissingNames);
+
+    res.status(200).json({
+      success: true,
+      message: `تم إكمال عملية تحديث الأسماء بنجاح. تم تحديث ${results.totalUpdated} محادثة من أصل ${results.totalProcessed}`,
+      results
+    });
+  } catch (error) {
+    console.error('❌ خطأ في معالجة طلب تحديث الأسماء:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message || 'حدث خطأ أثناء تحديث الأسماء'
+    });
+  }
+});
 
 // Test page endpoint
 app.get('/test', (req, res) => {
@@ -613,8 +1746,8 @@ const server = app.listen(PORT, () => {
   console.log(`🚀 Message Processing API started on port ${PORT}`);
   console.log(`📡 Available at: http://localhost:${PORT}`);
   console.log(`🔗 Process message endpoint: http://localhost:${PORT}/api/process-message`);
-  
-  // بدء خدمة تحديث أسماء المستخدمين من فيسبوك
+
+  // بدء تشغيل الخدمات الاضافية
   try {
     console.log('🚀 بدء خدمة تحديث أسماء المستخدمين من فيسبوك...');
     NameUpdateService.startAutoUpdate();

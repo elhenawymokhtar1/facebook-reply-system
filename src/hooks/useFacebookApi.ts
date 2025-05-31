@@ -158,6 +158,75 @@ export const useFacebookApi = () => {
     },
   });
 
+  // قطع الاتصال مع صفحة محددة
+  const disconnectPage = useMutation({
+    mutationFn: async (pageId: string) => {
+      await FacebookApiService.disconnectPage(pageId);
+      return pageId;
+    },
+    onSuccess: (pageId) => {
+      queryClient.invalidateQueries({ queryKey: ['connected-pages'] });
+      queryClient.invalidateQueries({ queryKey: ['facebook-settings'] });
+      toast({
+        title: "تم قطع الاتصال",
+        description: "تم قطع الاتصال مع الصفحة بنجاح",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ في قطع الاتصال",
+        description: error.message || "حدث خطأ أثناء قطع الاتصال",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // حذف صفحة نهائياً
+  const deletePage = useMutation({
+    mutationFn: async (pageId: string) => {
+      await FacebookApiService.deletePage(pageId);
+      return pageId;
+    },
+    onSuccess: (pageId) => {
+      queryClient.invalidateQueries({ queryKey: ['connected-pages'] });
+      queryClient.invalidateQueries({ queryKey: ['facebook-settings'] });
+      toast({
+        title: "تم حذف الصفحة",
+        description: "تم حذف الصفحة نهائياً من النظام",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ في حذف الصفحة",
+        description: error.message || "حدث خطأ أثناء حذف الصفحة",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // إعادة تفعيل صفحة
+  const reactivatePage = useMutation({
+    mutationFn: async (pageId: string) => {
+      await FacebookApiService.reactivatePage(pageId);
+      return pageId;
+    },
+    onSuccess: (pageId) => {
+      queryClient.invalidateQueries({ queryKey: ['connected-pages'] });
+      queryClient.invalidateQueries({ queryKey: ['facebook-settings'] });
+      toast({
+        title: "تم إعادة التفعيل",
+        description: "تم إعادة تفعيل الصفحة بنجاح",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "خطأ في إعادة التفعيل",
+        description: error.message || "حدث خطأ أثناء إعادة التفعيل",
+        variant: "destructive",
+      });
+    },
+  });
+
   // إعادة تعيين للربط الجديد
   const resetForNewConnection = () => {
     setAccessToken('');
@@ -184,11 +253,17 @@ export const useFacebookApi = () => {
     connectPage,
     sendMessage,
     disconnect,
+    disconnectPage,
+    deletePage,
+    reactivatePage,
     resetForNewConnection,
 
     // حالة التحميل
     isTestingConnection: testConnection.isPending,
     isConnectingPage: connectPage.isPending,
     isSendingMessage: sendMessage.isPending,
+    isDisconnectingPage: disconnectPage.isPending,
+    isDeletingPage: deletePage.isPending,
+    isReactivatingPage: reactivatePage.isPending,
   };
 };

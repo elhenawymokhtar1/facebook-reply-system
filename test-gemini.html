@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار Gemini AI</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input, textarea, select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        textarea {
+            height: 100px;
+            resize: vertical;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 12px 30px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+        }
+        .success {
+            background-color: #d4edda;
+            border: 1px solid #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+        }
+        .loading {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+        }
+        .status {
+            text-align: center;
+            margin: 20px 0;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 اختبار Gemini AI</h1>
+        
+        <div class="form-group">
+            <label for="senderId">معرف المرسل:</label>
+            <input type="text" id="senderId" value="test_user_123" placeholder="معرف المستخدم">
+        </div>
+        
+        <div class="form-group">
+            <label for="pageId">معرف الصفحة:</label>
+            <select id="pageId">
+                <option value="260345600493273">Swan shop</option>
+                <option value="240244019177739">سولا 127</option>
+            </select>
+        </div>
+        
+        <div class="form-group">
+            <label for="messageText">الرسالة:</label>
+            <textarea id="messageText" placeholder="اكتب رسالتك هنا...">مرحبا، عايز أعرف الأسعار</textarea>
+        </div>
+        
+        <div style="text-align: center;">
+            <button onclick="testProcessMessage()">🚀 اختبار معالجة الرسالة</button>
+            <button onclick="testGeminiSettings()">⚙️ اختبار إعدادات Gemini</button>
+            <button onclick="testGeminiDirect()">🤖 اختبار Gemini مباشر</button>
+        </div>
+        
+        <div id="status" class="status"></div>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        function updateStatus(message, type = 'loading') {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        function showResult(data, type = 'success') {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = `<div class="${type}">${JSON.stringify(data, null, 2)}</div>`;
+        }
+
+        async function testProcessMessage() {
+            updateStatus('🔄 جاري اختبار معالجة الرسالة...', 'loading');
+            
+            const senderId = document.getElementById('senderId').value;
+            const pageId = document.getElementById('pageId').value;
+            const messageText = document.getElementById('messageText').value;
+            
+            try {
+                const response = await fetch('http://localhost:3002/api/process-message', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        senderId: senderId,
+                        messageText: messageText,
+                        messageId: 'test_' + Date.now(),
+                        pageId: pageId,
+                        timestamp: Date.now()
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateStatus('✅ نجح اختبار معالجة الرسالة!', 'success');
+                    showResult(data, 'success');
+                } else {
+                    updateStatus('❌ فشل اختبار معالجة الرسالة', 'error');
+                    showResult(data, 'error');
+                }
+            } catch (error) {
+                updateStatus('❌ خطأ في الاتصال', 'error');
+                showResult({ error: error.message }, 'error');
+            }
+        }
+
+        async function testGeminiSettings() {
+            updateStatus('🔄 جاري اختبار إعدادات Gemini...', 'loading');
+            
+            try {
+                const response = await fetch('http://localhost:3002/api/gemini/settings');
+                const data = await response.json();
+                
+                if (response.ok) {
+                    updateStatus('✅ نجح اختبار إعدادات Gemini!', 'success');
+                    showResult(data, 'success');
+                } else {
+                    updateStatus('❌ فشل اختبار إعدادات Gemini', 'error');
+                    showResult(data, 'error');
+                }
+            } catch (error) {
+                updateStatus('❌ خطأ في الاتصال', 'error');
+                showResult({ error: error.message }, 'error');
+            }
+        }
+
+        async function testGeminiDirect() {
+            updateStatus('🔄 جاري اختبار Gemini مباشر...', 'loading');
+            
+            const messageText = document.getElementById('messageText').value;
+            
+            try {
+                const response = await fetch('http://localhost:3002/api/gemini/test', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        api_key: 'AIzaSyCeL3A69LBZvsuHmtIXd_s0AoGRCzwvBVU'
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateStatus('✅ نجح اختبار Gemini مباشر!', 'success');
+                    showResult(data, 'success');
+                } else {
+                    updateStatus('❌ فشل اختبار Gemini مباشر', 'error');
+                    showResult(data, 'error');
+                }
+            } catch (error) {
+                updateStatus('❌ خطأ في الاتصال', 'error');
+                showResult({ error: error.message }, 'error');
+            }
+        }
+
+        // تحديث الحالة عند تحميل الصفحة
+        window.addEventListener('load', () => {
+            updateStatus('🎯 الصفحة جاهزة للاختبار', 'success');
+        });
+    </script>
+</body>
+</html>

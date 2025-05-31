@@ -3,6 +3,7 @@ import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { FacebookApiService } from "@/services/facebookApi";
+import { frontendLogger } from "@/utils/frontendLogger";
 
 export interface Message {
   id: string;
@@ -26,29 +27,9 @@ export const useMessages = (conversationId: string | null) => {
     queryKey: ['messages', conversationId],
     queryFn: async () => {
       if (!conversationId) {
-        console.log('⚠️ لا توجد محادثة محددة لجلب الرسائل');
         return [];
       }
 
-      console.log('🔍 جلب الرسائل للمحادثة:', conversationId);
-
-      // أولاً: فحص جميع الرسائل في قاعدة البيانات للتشخيص
-      const { data: allMessages } = await supabase
-        .from('messages')
-        .select('id, conversation_id, content, sender_type, created_at')
-        .limit(10);
-
-      console.log('🔍 عينة من جميع الرسائل في قاعدة البيانات:', allMessages);
-
-      // ثانياً: فحص الرسائل لهذه المحادثة تحديداً
-      const { data: conversationMessages } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('conversation_id', conversationId);
-
-      console.log(`🔍 الرسائل للمحادثة ${conversationId}:`, conversationMessages);
-
-      // جلب الرسائل مباشرة من Supabase
       const { data, error } = await supabase
         .from('messages')
         .select('*')
@@ -56,59 +37,32 @@ export const useMessages = (conversationId: string | null) => {
         .order('created_at', { ascending: true });
 
       if (error) {
-        console.error('❌ خطأ في جلب الرسائل من Supabase:', error);
-        console.error('📋 تفاصيل الخطأ:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
-        });
         throw error;
-      }
-
-      console.log(`✅ تم جلب ${data?.length || 0} رسالة للمحادثة ${conversationId}`);
-      console.log('📋 الرسائل المجلبة:', data);
-
-      // إذا لم نجد رسائل، دعنا نتحقق من وجود المحادثة
-      if (!data || data.length === 0) {
-        console.log('🔍 لا توجد رسائل، التحقق من وجود المحادثة...');
-        const { data: convData, error: convError } = await supabase
-          .from('conversations')
-          .select('*')
-          .eq('id', conversationId)
-          .single();
-
-        if (convError) {
-          console.error('❌ خطأ في جلب المحادثة:', convError);
-        } else {
-          console.log('📋 بيانات المحادثة:', convData);
-        }
       }
 
       return data as Message[];
     },
     enabled: !!conversationId,
-    retry: (failureCount, error) => {
-      console.log(`🔄 Retry attempt ${failureCount} for messages:`, error);
-      return failureCount < 2; // إعادة المحاولة مرتين فقط
-    },
-    staleTime: 0, // البيانات تبقى fresh لمدة 0 ثواني (دائماً fresh)
-    cacheTime: 0, // البيانات لا تبقى في الكاش (دائماً refetch)
+    retry: 2,
+    staleTime: 0,
+    gcTime: 0,
   });
 
   // إرسال رسالة جديدة
   const sendMessage = useMutation({
     mutationFn: async ({ content, senderType, imageFile }: { content: string; senderType: 'admin' | 'bot'; imageFile?: File }) => {
-      console.log('🚀 بدء عملية إرسال الرسالة...');
-      console.log('📋 التفاصيل:', {
+      const requestId = Math.random().toString(36).substr(2, 9);
+
+      frontendLogger.info(`Starting message send process`, {
+        requestId,
         conversationId,
-        content: content.substring(0, 50) + (content.length > 50 ? '...' : ''),
+        contentLength: content?.length || 0,
         senderType,
-        hasImage: !!imageFile
-      });
+        hasImageFile: !!imageFile
+      }, 'MESSAGE_SEND');
 
       if (!conversationId) {
-        console.error('❌ لا توجد محادثة محددة');
+        frontendLogger.error(`No conversation selected`, { requestId }, 'MESSAGE_SEND');
         throw new Error('No conversation selected');
       }
 
@@ -117,29 +71,20 @@ export const useMessages = (conversationId: string | null) => {
 
       // رفع الصورة إذا كانت موجودة
       if (imageFile) {
-        console.log('📷 بدء رفع الصورة...');
-        console.log('📋 تفاصيل الصورة:', {
-          name: imageFile.name,
-          size: imageFile.size,
-          type: imageFile.type
-        });
+        frontendLogger.info(`Starting image upload`, { requestId, fileName: imageFile.name }, 'IMAGE_UPLOAD');
 
         const fileExt = imageFile.name.split('.').pop();
         const fileName = `${Date.now()}.${fileExt}`;
         const filePath = `chat-images/${fileName}`;
-
-        console.log('📁 مسار الرفع:', filePath);
 
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from('chat-images')
           .upload(filePath, imageFile);
 
         if (uploadError) {
-          console.error('❌ خطأ في رفع الصورة:', uploadError);
+          frontendLogger.error(`Image upload failed`, { requestId, error: uploadError }, 'IMAGE_UPLOAD');
           throw uploadError;
         }
-
-        console.log('✅ تم رفع الصورة بنجاح');
 
         // الحصول على الرابط العام للصورة
         const { data: urlData } = supabase.storage
@@ -147,14 +92,12 @@ export const useMessages = (conversationId: string | null) => {
           .getPublicUrl(filePath);
 
         imageUrl = urlData.publicUrl;
-        console.log('🔗 رابط الصورة:', imageUrl);
-
-        // المحتوى النهائي يبقى كما هو (بدون إضافة رابط الصورة للنص)
         finalContent = content;
+        frontendLogger.info(`Image uploaded successfully`, { requestId, imageUrl }, 'IMAGE_UPLOAD');
       }
 
       // الحصول على معلومات المحادثة
-      console.log('🔍 جلب معلومات المحادثة...');
+      console.log(`🔍 [${requestId}] جلب معلومات المحادثة...`);
       const { data: conversation, error: convError } = await supabase
         .from('conversations')
         .select('customer_facebook_id, facebook_page_id, customer_name')
@@ -162,203 +105,171 @@ export const useMessages = (conversationId: string | null) => {
         .single();
 
       if (convError) {
-        console.error('❌ خطأ في جلب معلومات المحادثة:', convError);
+        console.error(`❌ [${requestId}] خطأ في جلب المحادثة:`, convError);
         throw new Error('Conversation fetch error: ' + convError.message);
       }
 
       if (!conversation) {
-        console.error('❌ لم يتم العثور على المحادثة');
+        console.error(`❌ [${requestId}] المحادثة غير موجودة`);
         throw new Error('Conversation not found');
       }
 
-      console.log('✅ تم جلب معلومات المحادثة:', {
-        customer_name: conversation.customer_name,
-        customer_facebook_id: conversation.customer_facebook_id,
-        facebook_page_id: conversation.facebook_page_id
+      console.log(`✅ [${requestId}] تم جلب معلومات المحادثة:`, {
+        customer_id: conversation.customer_facebook_id,
+        page_id: conversation.facebook_page_id,
+        customer_name: conversation.customer_name
       });
 
       // إرسال الرسالة إلى Facebook إذا كانت من الأدمن
       if (senderType === 'admin') {
-        console.log('📤 بدء إرسال الرسالة إلى Facebook...');
+        console.log(`📱 [${requestId}] بدء إرسال الرسالة إلى Facebook عبر خادم API...`);
         try {
-          // استخدام facebook_page_id من المحادثة أو الصفحة الافتراضية
           const pageId = conversation.facebook_page_id || '240244019177739';
-          console.log('📄 معرف الصفحة المستخدم:', pageId);
+          console.log(`🔍 [${requestId}] معرف الصفحة: ${pageId}`);
 
-          const { FacebookApiService } = await import('@/services/facebookApi');
-          console.log('🔍 جلب إعدادات الصفحة...');
-          const facebookSettings = await FacebookApiService.getPageSettings(pageId);
+          // جلب إعدادات الفيسبوك من خلال API
+          const pageSettingsResponse = await fetch(`/api/facebook/page-settings/${pageId}`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+          });
+          
+          if (!pageSettingsResponse.ok) {
+            console.error(`❌ [${requestId}] خطأ في جلب إعدادات الصفحة: ${pageSettingsResponse.status}`);
+            throw new Error(`Failed to get page settings: ${pageSettingsResponse.status}`);
+          }
+          
+          const facebookSettings = await pageSettingsResponse.json();
 
-          if (!facebookSettings) {
-            console.error('❌ لم يتم العثور على إعدادات الصفحة للمعرف:', pageId);
-
-            // عرض جميع الصفحات المتاحة للتشخيص
-            const allPages = await FacebookApiService.getAllPages();
-            console.log('📋 الصفحات المتاحة:', allPages?.map(p => ({ id: p.page_id, name: p.page_name })));
-
+          if (!facebookSettings || !facebookSettings.access_token) {
+            console.error(`❌ [${requestId}] إعدادات Facebook غير موجودة للصفحة: ${pageId}`);
             throw new Error('Facebook settings not found for page: ' + pageId);
           }
 
-          console.log('✅ تم جلب إعدادات الصفحة:', {
-            page_name: facebookSettings.page_name,
-            page_id: facebookSettings.page_id,
-            has_access_token: !!facebookSettings.access_token
-          });
+          console.log(`✅ [${requestId}] تم جلب إعدادات Facebook للصفحة`);
 
-          // إرسال الرسالة عبر Facebook API
-          const facebookService = new FacebookApiService(facebookSettings.access_token);
-
-          // إذا كانت هناك صورة، أرسلها كـ attachment
+          // إرسال الصورة والنص عبر API Server
           if (imageUrl) {
-            console.log('📷 إرسال الصورة إلى Facebook...');
-            const imageResult = await facebookService.sendImage(
-              facebookSettings.access_token,
-              conversation.customer_facebook_id,
-              imageUrl
-            );
-            console.log('✅ تم إرسال الصورة:', imageResult);
+            console.log(`📸 [${requestId}] إرسال صورة إلى Facebook عبر API Server...`);
+            
+            const sendImageResponse = await fetch('/api/facebook/send-image', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                access_token: facebookSettings.access_token,
+                recipient_id: conversation.customer_facebook_id,
+                image_url: imageUrl
+              })
+            });
+            
+            if (!sendImageResponse.ok) {
+              const errorData = await sendImageResponse.text();
+              console.error(`❌ [${requestId}] خطأ في إرسال الصورة:`, errorData);
+              throw new Error(`Failed to send image: ${errorData}`);
+            }
+            
+            console.log(`✅ [${requestId}] تم إرسال الصورة بنجاح`);
 
-            // إرسال النص إذا كان موجود
             if (content.trim()) {
-              console.log('📝 إرسال النص مع الصورة...');
-              const textResult = await facebookService.sendMessage(
-                facebookSettings.access_token,
-                conversation.customer_facebook_id,
-                content
-              );
-              console.log('✅ تم إرسال النص:', textResult);
+              console.log(`📝 [${requestId}] إرسال نص مع الصورة...`);
+              
+              const sendTextResponse = await fetch('/api/facebook/send-message', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  access_token: facebookSettings.access_token,
+                  recipient_id: conversation.customer_facebook_id,
+                  message: content
+                })
+              });
+              
+              if (!sendTextResponse.ok) {
+                const errorData = await sendTextResponse.text();
+                console.error(`❌ [${requestId}] خطأ في إرسال النص:`, errorData);
+                throw new Error(`Failed to send text message: ${errorData}`);
+              }
+              
+              console.log(`✅ [${requestId}] تم إرسال النص بنجاح`);
             }
           } else {
-            // إرسال النص فقط
-            console.log('📝 إرسال النص إلى Facebook...');
-            const textResult = await facebookService.sendMessage(
-              facebookSettings.access_token,
-              conversation.customer_facebook_id,
-              finalContent
-            );
-            console.log('✅ تم إرسال النص:', textResult);
+            console.log(`📝 [${requestId}] إرسال رسالة نصية إلى Facebook عبر API Server...`);
+            
+            const sendTextResponse = await fetch('/api/facebook/send-message', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                access_token: facebookSettings.access_token,
+                recipient_id: conversation.customer_facebook_id,
+                message: finalContent
+              })
+            });
+            
+            if (!sendTextResponse.ok) {
+              const errorData = await sendTextResponse.text();
+              console.error(`❌ [${requestId}] خطأ في إرسال الرسالة النصية:`, errorData);
+              throw new Error(`Failed to send text message: ${errorData}`);
+            }
+            
+            console.log(`✅ [${requestId}] تم إرسال الرسالة النصية بنجاح`);
           }
 
-          console.log('🎉 تم إرسال الرسالة إلى Facebook بنجاح');
+          console.log(`🎉 [${requestId}] تم إرسال الرسالة إلى Facebook بنجاح!`);
         } catch (facebookError) {
-          console.error('❌ خطأ في إرسال الرسالة إلى Facebook:', facebookError);
-
-          // تفاصيل إضافية للخطأ
-          if (facebookError instanceof Error) {
-            console.error('📋 رسالة الخطأ:', facebookError.message);
-            console.error('📋 تفاصيل الخطأ:', facebookError.stack);
-          }
-
+          console.error(`❌ [${requestId}] خطأ في إرسال الرسالة إلى Facebook:`, facebookError);
           throw new Error('Failed to send message to Facebook: ' + (facebookError instanceof Error ? facebookError.message : 'Unknown error'));
         }
       }
 
-      // حفظ الرسالة في قاعدة البيانات مباشرة
-      console.log('💾 حفظ الرسالة في قاعدة البيانات...');
+      // حفظ الرسالة عبر الـ API Server
+      frontendLogger.apiCall('POST', `/api/conversations/${conversationId}/messages`, {
+        requestId,
+        contentLength: finalContent?.length || 0,
+        hasImage: !!imageUrl
+      });
 
-      // الحصول على page_id من المحادثة
-      const { data: conversationData } = await supabase
-        .from('conversations')
-        .select('page_id')
-        .eq('id', conversationId)
-        .single();
-
-      const messageData = {
-        conversation_id: conversationId,
-        content: finalContent,
-        sender_type: senderType,
-        is_read: false,
-        is_auto_reply: senderType === 'bot',
-        image_url: imageUrl,
-        page_id: conversationData?.page_id || 'unknown'
-      };
-      console.log('📋 بيانات الرسالة:', messageData);
-
-      const { data, error } = await supabase
-        .from('messages')
-        .insert(messageData)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('❌ خطأ في حفظ الرسالة في قاعدة البيانات:', error);
-        console.error('📋 تفاصيل الخطأ:', {
-          code: error.code,
-          message: error.message,
-          details: error.details,
-          hint: error.hint
-        });
-        throw error;
-      }
-
-      console.log('✅ تم حفظ الرسالة في قاعدة البيانات:', data.id);
-
-      // تحديث آخر رسالة في المحادثة وإعادة تعيين عداد الرسائل غير المقروءة
-      console.log('🔄 تحديث آخر رسالة في المحادثة...');
-      const { error: updateError } = await supabase
-        .from('conversations')
-        .update({
-          last_message: finalContent,
-          last_message_at: new Date().toISOString(),
-          unread_count: 0  // إعادة تعيين العداد لأننا رددنا على الرسائل
+      const response = await fetch(`/api/conversations/${conversationId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          content: finalContent,
+          sender_type: senderType,
+          image_url: imageUrl
         })
-        .eq('id', conversationId);
+      });
 
-      if (updateError) {
-        console.error('❌ خطأ في تحديث المحادثة:', updateError);
-      } else {
-        console.log('✅ تم تحديث المحادثة بنجاح');
+      if (!response.ok) {
+        const errorData = await response.json();
+        frontendLogger.apiError('POST', `/api/conversations/${conversationId}/messages`, {
+          requestId,
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData
+        });
+        throw new Error(errorData.details || errorData.error || 'Failed to send message');
       }
 
-      // تحديث حالة جميع رسائل العميل غير المقروءة إلى مقروءة
-      console.log('🔄 تحديث حالة رسائل العميل إلى مقروءة...');
-      const { error: messagesUpdateError } = await supabase
-        .from('messages')
-        .update({ message_status: 'answered' })
-        .eq('conversation_id', conversationId)
-        .eq('sender_type', 'customer')
-        .eq('message_status', 'unanswered');
+      const data = await response.json();
+      frontendLogger.info(`Message sent successfully via API Server`, {
+        requestId,
+        messageId: data.id,
+        duration: data.duration
+      }, 'MESSAGE_SEND');
 
-      if (messagesUpdateError) {
-        console.error('❌ خطأ في تحديث حالة الرسائل:', messagesUpdateError);
-      } else {
-        console.log('✅ تم تحديث حالة رسائل العميل بنجاح');
-      }
-
-      console.log('🎉 تمت عملية إرسال الرسالة بالكامل بنجاح!');
       return data;
     },
-    onSuccess: (data) => {
-      console.log('🎉 Mutation Success: تم إرسال الرسالة بنجاح');
-      console.log('📋 بيانات الرسالة المرسلة:', data);
-
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
       queryClient.invalidateQueries({ queryKey: ['conversations'] });
-
-      console.log('🔄 تم تحديث الـ queries');
-    },
-    onError: (error) => {
-      console.error('❌ Mutation Error: فشل في إرسال الرسالة');
-      console.error('📋 تفاصيل الخطأ:', error);
-
-      if (error instanceof Error) {
-        console.error('📋 رسالة الخطأ:', error.message);
-        console.error('📋 Stack trace:', error.stack);
-      }
-    },
-    onMutate: (variables) => {
-      console.log('🔄 Mutation Start: بدء عملية إرسال الرسالة');
-      console.log('📋 المتغيرات:', {
-        content: variables.content.substring(0, 50) + (variables.content.length > 50 ? '...' : ''),
-        senderType: variables.senderType,
-        hasImage: !!variables.imageFile
-      });
     }
   });
 
-  // استمع للرسائل الجديدة
+  // استمع للرسائل الجديدة والتحديثات
   useEffect(() => {
     if (!conversationId) return;
+
+    // تسجيل الاستماع لبدء عملية الاشتراك
+    console.log('🔄 Setting up message subscription for conversation:', conversationId);
 
     const channel = supabase
       .channel(`messages-${conversationId}`)
@@ -370,62 +281,64 @@ export const useMessages = (conversationId: string | null) => {
           table: 'messages',
           filter: `conversation_id=eq.${conversationId}`
         },
-        () => {
+        (payload) => {
+          console.log('📥 New message received:', payload);
           queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
         }
       )
-      .subscribe();
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'messages',
+          filter: `conversation_id=eq.${conversationId}`
+        },
+        (payload) => {
+          console.log('🔄 Message updated:', payload);
+          queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+        }
+      )
+      .subscribe((status) => {
+        console.log('📢 Subscription status:', status);
+      });
 
     return () => {
       supabase.removeChannel(channel);
     };
   }, [conversationId, queryClient]);
 
-  // إضافة mutation لتحديث حالة الرسالة
+  // تحديث حالة الرسالة
   const updateMessageStatus = useMutation({
     mutationFn: async ({ messageId, status }: { messageId: string; status: string }) => {
-      console.log('🔄 تحديث حالة الرسالة:', { messageId, status });
-
       const { error } = await supabase
         .from('messages')
         .update({ message_status: status })
         .eq('id', messageId);
 
       if (error) {
-        console.error('❌ خطأ في تحديث حالة الرسالة:', error);
         throw error;
       }
     },
     onSuccess: () => {
-      console.log('✅ تم تحديث حالة الرسالة بنجاح');
       queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
-    },
-    onError: (error) => {
-      console.error('❌ فشل في تحديث حالة الرسالة:', error);
     }
   });
 
-  // إضافة mutation لتحديث حالة عدة رسائل
+  // تحديث حالة عدة رسائل
   const updateMultipleMessagesStatus = useMutation({
     mutationFn: async ({ messageIds, status }: { messageIds: string[]; status: string }) => {
-      console.log('🔄 تحديث حالة عدة رسائل:', { messageIds, status });
-
       const { error } = await supabase
         .from('messages')
         .update({ message_status: status })
         .in('id', messageIds);
 
       if (error) {
-        console.error('❌ خطأ في تحديث حالة الرسائل:', error);
         throw error;
       }
     },
     onSuccess: () => {
-      console.log('✅ تم تحديث حالة الرسائل بنجاح');
       queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
-    },
-    onError: (error) => {
-      console.error('❌ فشل في تحديث حالة الرسائل:', error);
     }
   });
 
