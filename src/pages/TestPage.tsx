@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Palette, BarChart3, TestTube, ShoppingBag, TrendingUp, Zap, Package, Plus, Eye, Trash2, RefreshCw } from 'lucide-react';
+import { Palette, BarChart3, TestTube, ShoppingBag, TrendingUp, Zap, Package, Plus, Eye, Trash2, RefreshCw, Star, Settings, Crown } from 'lucide-react';
 import { toast } from 'sonner';
 
 const TestPage = () => {
@@ -24,9 +24,18 @@ const TestPage = () => {
     mostPopularColor: ''
   });
 
-  // تحميل الألوان الحقيقية
+  // حالات المنتجات الجديدة
+  const [products, setProducts] = useState([]);
+  const [defaultProduct, setDefaultProduct] = useState(null);
+  const [productsLoading, setProductsLoading] = useState(true);
+  const [isSetDefaultDialogOpen, setIsSetDefaultDialogOpen] = useState(false);
+  const [newCampaignName, setNewCampaignName] = useState('');
+
+  // تحميل الألوان والمنتجات عند بدء التشغيل
   useEffect(() => {
     loadColors();
+    loadProducts();
+    loadDefaultProduct();
   }, []);
 
   const loadColors = async () => {
@@ -174,6 +183,97 @@ const TestPage = () => {
     return `منذ ${diffInDays} يوم`;
   };
 
+  // دوال المنتجات الجديدة
+  const loadProducts = async () => {
+    try {
+      setProductsLoading(true);
+      const response = await fetch('http://localhost:3006/api/products');
+
+      if (response.ok) {
+        const data = await response.json();
+        setProducts(data);
+        toast.success(`تم تحميل ${data.length} منتج من الخادم`);
+      } else {
+        throw new Error('Failed to fetch products');
+      }
+    } catch (error) {
+      console.error('Error loading products:', error);
+      toast.error('فشل في تحميل المنتجات، سيتم استخدام بيانات افتراضية');
+
+      // بيانات افتراضية للمنتجات
+      setProducts([
+        {
+          id: 'shoe-001',
+          name: 'حذاء رياضي عصري',
+          description: 'حذاء رياضي مريح ومناسب للاستخدام اليومي',
+          category: 'أحذية',
+          base_price: 450,
+          brand: 'Nike',
+          is_default: true,
+          campaign_name: 'حملة الصيف 2025',
+          product_variants: [
+            { color_name: 'أبيض', price: 450, stock_quantity: 10 },
+            { color_name: 'أسود', price: 450, stock_quantity: 8 }
+          ]
+        }
+      ]);
+    } finally {
+      setProductsLoading(false);
+    }
+  };
+
+  const loadDefaultProduct = async () => {
+    try {
+      const response = await fetch('http://localhost:3006/api/products/default');
+
+      if (response.ok) {
+        const data = await response.json();
+        setDefaultProduct(data);
+      } else {
+        throw new Error('Failed to fetch default product');
+      }
+    } catch (error) {
+      console.error('Error loading default product:', error);
+
+      // منتج افتراضي
+      setDefaultProduct({
+        id: 'shoe-001',
+        name: 'حذاء رياضي عصري',
+        base_price: 450,
+        brand: 'Nike',
+        campaign_name: 'حملة الصيف 2025',
+        product_variants: [
+          { color_name: 'أبيض', image_url: 'https://files.easy-orders.net/17446412085557436357.jpg' }
+        ]
+      });
+    }
+  };
+
+  const setProductAsDefault = async (productId) => {
+    try {
+      const response = await fetch(`http://localhost:3006/api/products/set-default/${productId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          campaign_name: newCampaignName.trim() || null
+        })
+      });
+
+      if (response.ok) {
+        toast.success('تم تعيين المنتج كافتراضي بنجاح');
+        setNewCampaignName('');
+        setIsSetDefaultDialogOpen(false);
+        loadProducts();
+        loadDefaultProduct();
+      } else {
+        throw new Error('Failed to set default product');
+      }
+    } catch (error) {
+      console.error('Error setting default product:', error);
+      toast.error('حدث خطأ أثناء تعيين المنتج الافتراضي');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100" dir="rtl">
       <Navigation />
@@ -191,10 +291,14 @@ const TestPage = () => {
 
         {/* Tabs */}
         <Tabs defaultValue="colors" className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-6">
+          <TabsList className="grid w-full grid-cols-5 mb-6">
             <TabsTrigger value="colors" className="flex items-center gap-2">
               <Palette className="w-4 h-4" />
               الألوان والصور
+            </TabsTrigger>
+            <TabsTrigger value="active-product" className="flex items-center gap-2">
+              <Star className="w-4 h-4" />
+              المنتج النشط
             </TabsTrigger>
             <TabsTrigger value="analytics" className="flex items-center gap-2">
               <BarChart3 className="w-4 h-4" />
@@ -424,6 +528,199 @@ const TestPage = () => {
                 )}
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* تبويب المنتج النشط */}
+          <TabsContent value="active-product" className="space-y-6">
+            {/* معلومات المنتج النشط */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    <Crown className="w-5 h-5 text-yellow-500" />
+                    المنتج النشط الحالي
+                  </span>
+                  <Dialog open={isSetDefaultDialogOpen} onOpenChange={setIsSetDefaultDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button>
+                        <Settings className="w-4 h-4 ml-2" />
+                        تغيير المنتج النشط
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>اختيار المنتج النشط</DialogTitle>
+                        <DialogDescription>
+                          اختر المنتج الذي سيكون افتراضي<|im_start|> للعملاء
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <div>
+                          <Label>اسم الحملة (اختياري)</Label>
+                          <Input
+                            value={newCampaignName}
+                            onChange={(e) => setNewCampaignName(e.target.value)}
+                            placeholder="مثال: حملة الصيف 2025"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>اختر المنتج:</Label>
+                          {productsLoading ? (
+                            <div className="text-center py-4">
+                              <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                              <p>جاري تحميل المنتجات...</p>
+                            </div>
+                          ) : (
+                            <div className="space-y-2 max-h-60 overflow-y-auto">
+                              {products.map((product) => (
+                                <div
+                                  key={product.id}
+                                  className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                                    product.is_default
+                                      ? 'border-yellow-500 bg-yellow-50'
+                                      : 'border-gray-200 hover:border-blue-300'
+                                  }`}
+                                  onClick={() => setProductAsDefault(product.id)}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div>
+                                      <h4 className="font-medium">{product.name}</h4>
+                                      <p className="text-sm text-gray-600">{product.brand} - {product.base_price} ج</p>
+                                      <p className="text-xs text-gray-500">
+                                        {product.product_variants?.length || 0} متغير متاح
+                                      </p>
+                                    </div>
+                                    {product.is_default && (
+                                      <Crown className="w-5 h-5 text-yellow-500" />
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {defaultProduct ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {/* معلومات المنتج */}
+                    <div className="space-y-4">
+                      <div className="flex items-center gap-3">
+                        <Crown className="w-8 h-8 text-yellow-500" />
+                        <div>
+                          <h3 className="text-xl font-bold">{defaultProduct.name}</h3>
+                          <p className="text-gray-600">{defaultProduct.brand}</p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <p className="text-sm text-green-700">السعر الأساسي</p>
+                          <p className="text-2xl font-bold text-green-800">{defaultProduct.base_price} ج</p>
+                        </div>
+                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <p className="text-sm text-blue-700">عدد المتغيرات</p>
+                          <p className="text-2xl font-bold text-blue-800">{defaultProduct.product_variants?.length || 0}</p>
+                        </div>
+                      </div>
+
+                      {defaultProduct.campaign_name && (
+                        <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                          <p className="text-sm text-purple-700">الحملة النشطة</p>
+                          <p className="font-medium text-purple-800">{defaultProduct.campaign_name}</p>
+                        </div>
+                      )}
+
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-gray-700">الألوان المتاحة:</p>
+                        <div className="flex gap-2 flex-wrap">
+                          {defaultProduct.product_variants?.map((variant, index) => (
+                            <Badge key={index} variant="secondary">
+                              {variant.color_name}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* صورة المنتج */}
+                    <div className="space-y-4">
+                      {defaultProduct.product_variants?.[0]?.image_url && (
+                        <div>
+                          <p className="text-sm font-medium text-gray-700 mb-2">صورة المنتج:</p>
+                          <img
+                            src={defaultProduct.product_variants[0].image_url}
+                            alt={defaultProduct.name}
+                            className="w-full h-64 object-cover rounded-lg border"
+                            onError={(e) => {
+                              e.currentTarget.src = 'https://via.placeholder.com/300x200?text=' + encodeURIComponent(defaultProduct.name);
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-12">
+                    <Crown className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">لا يوجد منتج نشط</h3>
+                    <p className="text-gray-500 mb-4">اختر منتج<|im_start|> ليكون افتراضي<|im_start|> للعملاء</p>
+                    <Button onClick={() => setIsSetDefaultDialogOpen(true)}>
+                      <Settings className="w-4 h-4 ml-2" />
+                      اختيار منتج نشط
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* إحصائيات سريعة للمنتج النشط */}
+            {defaultProduct && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">الاستفسارات اليوم</p>
+                        <p className="text-2xl font-bold text-blue-600">24</p>
+                        <p className="text-xs text-gray-500">+12% من أمس</p>
+                      </div>
+                      <TrendingUp className="w-8 h-8 text-blue-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">معدل التحويل</p>
+                        <p className="text-2xl font-bold text-green-600">18%</p>
+                        <p className="text-xs text-gray-500">من الاستفسارات</p>
+                      </div>
+                      <Zap className="w-8 h-8 text-green-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600">اللون الأكثر طلب<|im_start|></p>
+                        <p className="text-lg font-bold text-purple-600">
+                          {defaultProduct.product_variants?.[0]?.color_name || 'غير محدد'}
+                        </p>
+                        <p className="text-xs text-gray-500">من إجمالي الطلبات</p>
+                      </div>
+                      <Palette className="w-8 h-8 text-purple-500" />
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
           </TabsContent>
 
           {/* تبويب الإحصائيات */}
