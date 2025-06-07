@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { mockAPI } from '@/data/mockData';
 
 // أنواع البيانات
 interface ProductVariant {
@@ -58,16 +57,73 @@ export const useProductsVariants = () => {
   // جلب جميع المنتجات مع متغيراتها
   const { data: products = [], isLoading, error } = useQuery({
     queryKey: ['products-variants'],
-    queryFn: mockAPI.getProducts,
-    staleTime: 30000,
-    cacheTime: 300000,
+    queryFn: async (): Promise<Product[]> => {
+      const response = await fetch(`${API_BASE}/products-variants`);
+      if (!response.ok) {
+        throw new Error('Failed to fetch products');
+      }
+      const data = await response.json();
+
+      // تحويل البيانات من format قاعدة البيانات إلى format المطلوب
+      const groupedProducts: { [key: string]: Product } = {};
+
+      data.forEach((item: any) => {
+        if (!groupedProducts[item.product_id]) {
+          groupedProducts[item.product_id] = {
+            id: item.product_id,
+            name: item.product_name,
+            description: item.product_description,
+            category: item.product_category,
+            base_price: item.product_base_price,
+            brand: item.product_brand,
+            is_active: item.product_is_active,
+            created_at: item.product_created_at,
+            variants: []
+          };
+        }
+
+        if (item.variant_id) {
+          groupedProducts[item.product_id].variants.push({
+            id: item.variant_id,
+            color: item.variant_color,
+            size: item.variant_size,
+            price: item.variant_price,
+            stock_quantity: item.variant_stock_quantity,
+            sku: item.variant_sku || '',
+            image_url: item.variant_image_url || '',
+            is_available: item.variant_is_available,
+            created_at: item.variant_created_at
+          });
+        }
+      });
+
+      return Object.values(groupedProducts);
+    },
+    staleTime: 0, // البيانات تصبح قديمة فوراً
+    cacheTime: 0, // لا نحتفظ بالـ cache
   });
 
   // إضافة منتج جديد مع متغيراته
   const addProduct = useMutation({
-    mutationFn: mockAPI.createProduct,
+    mutationFn: async (productData: CreateProductData): Promise<Product> => {
+      const response = await fetch(`${API_BASE}/products-variants`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(productData),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to create product');
+      }
+
+      return response.json();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products-variants'] });
+      queryClient.refetchQueries({ queryKey: ['products-variants'] });
       toast.success('تم إضافة المنتج بنجاح');
     },
     onError: (error: Error) => {
@@ -95,6 +151,7 @@ export const useProductsVariants = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products-variants'] });
+      queryClient.refetchQueries({ queryKey: ['products-variants'] });
       toast.success('تم تحديث المنتج بنجاح');
     },
     onError: (error: Error) => {
@@ -104,9 +161,19 @@ export const useProductsVariants = () => {
 
   // حذف منتج
   const deleteProduct = useMutation({
-    mutationFn: mockAPI.deleteProduct,
+    mutationFn: async (productId: string): Promise<void> => {
+      const response = await fetch(`${API_BASE}/products-variants/${productId}`, {
+        method: 'DELETE',
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to delete product');
+      }
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products-variants'] });
+      queryClient.refetchQueries({ queryKey: ['products-variants'] });
       toast.success('تم حذف المنتج بنجاح');
     },
     onError: (error: Error) => {

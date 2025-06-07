@@ -30,18 +30,73 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+// إضافة مسار للملفات الثابتة
+app.use(express.static('public'));
+
 // إعداد ترميز UTF-8
 app.use((req, res, next) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   next();
 });
 
-
+// Debug middleware - يجب أن يكون قبل جميع الـ routes
+app.use((req, res, next) => {
+  // فقط log للمسارات المهمة
+  if (req.url.includes('/api/gemini') || req.url.includes('/api/debug')) {
+    console.log(`🔍 [${new Date().toLocaleTimeString()}] ${req.method} ${req.url}`);
+    if (req.body && Object.keys(req.body).length > 0) {
+      console.log(`📝 Body:`, JSON.stringify(req.body, null, 2));
+    }
+  }
+  next();
+});
 
 // Colors management routes
 app.use('/api/colors', colorsRouter);
 
 console.log('🤖 Setting up Gemini AI routes...');
+// استخدام مسارات Gemini المنفصلة
+app.use('/api/gemini', geminiRouter);
+
+// مسار مؤقت لاختبار معالجة الرسائل
+app.post('/api/gemini-temp/process', async (req, res) => {
+  console.log('🧪 TEMP GEMINI PROCESS ENDPOINT HIT!');
+  console.log('📝 Body:', JSON.stringify(req.body, null, 2));
+
+  try {
+    const { senderId, messageText, pageId } = req.body;
+
+    if (!senderId || !messageText || !pageId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: senderId, messageText, pageId'
+      });
+    }
+
+    // استدعاء المعالج مباشرة
+    const { GeminiMessageProcessor } = await import('../services/geminiMessageProcessor');
+    const conversationId = `temp_${senderId}_${Date.now()}`;
+
+    console.log('🚀 Calling temp processor...');
+    const success = await GeminiMessageProcessor.processIncomingMessage(
+      messageText,
+      conversationId,
+      senderId
+    );
+
+    res.json({
+      success: success,
+      message: success ? 'Temp Gemini AI processed successfully' : 'Temp Gemini AI failed'
+    });
+
+  } catch (error) {
+    console.error('❌ Error in temp Gemini process:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error: ' + (error instanceof Error ? error.message : 'Unknown error')
+    });
+  }
+});
 
 // Test endpoint for debugging
 app.post('/api/debug-test', (req, res) => {
@@ -50,161 +105,13 @@ app.post('/api/debug-test', (req, res) => {
   res.json({ success: true, message: 'Debug test endpoint working!', timestamp: new Date().toISOString() });
 });
 
-// Gemini AI routes - مباشرة في الـ server
-app.get('/api/gemini/test', (req, res) => {
-  console.log('🧪 Gemini test route called!');
-  res.json({ message: 'Gemini API is working!' });
-});
+// تم نقل مسارات Gemini إلى gemini-routes.ts
 
-app.get('/api/gemini/settings', async (req, res) => {
-  try {
-    console.log('🤖 Fetching Gemini settings...');
+// تم نقل مسار settings إلى gemini-routes.ts
 
-    const { data, error } = await supabase
-      .from('gemini_settings')
-      .select('*')
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .single();
+// تم نقل مسار POST settings إلى gemini-routes.ts
 
-    if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
-      console.error('Error fetching Gemini settings:', error);
-      return res.status(500).json({ error: 'Failed to fetch Gemini settings' });
-    }
-
-    if (!data) {
-      console.log('⚠️ No Gemini settings found, returning defaults');
-      return res.json({
-        api_key: '',
-        model: 'gemini-1.5-flash',
-        prompt_template: '',
-        is_enabled: false,
-        max_tokens: 1000,
-        temperature: 0.7
-      });
-    }
-
-    console.log('✅ Gemini settings found:', {
-      model: data.model,
-      is_enabled: data.is_enabled,
-      hasApiKey: !!data.api_key
-    });
-
-    res.json(data);
-  } catch (error) {
-    console.error('Error in GET /api/gemini/settings:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/api/gemini/settings', async (req, res) => {
-  try {
-    console.log('🤖 Saving Gemini settings...');
-    const settings = req.body;
-
-    // التحقق من وجود سجل موجود
-    const { data: existingSettings } = await supabase
-      .from('gemini_settings')
-      .select('id')
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .single();
-
-    if (existingSettings) {
-      // تحديث السجل الموجود
-      const { data, error } = await supabase
-        .from('gemini_settings')
-        .update({
-          ...settings,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', existingSettings.id)
-        .select()
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      console.log('✅ Gemini settings updated successfully');
-      res.json(data);
-    } else {
-      // إنشاء سجل جديد
-      const { data, error } = await supabase
-        .from('gemini_settings')
-        .insert({
-          ...settings,
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-
-      if (error) {
-        throw error;
-      }
-
-      console.log('✅ Gemini settings created successfully');
-      res.json(data);
-    }
-  } catch (error) {
-    console.error('Error in POST /api/gemini/settings:', error);
-    res.status(500).json({ error: 'Failed to save Gemini settings' });
-  }
-});
-
-app.post('/api/gemini/test', async (req, res) => {
-  try {
-    console.log('🧪 Testing Gemini connection...');
-    const { api_key } = req.body;
-
-    if (!api_key) {
-      return res.status(400).json({ error: 'API key is required' });
-    }
-
-    // اختبار الاتصال مع Gemini
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${api_key}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: 'مرحبا، هذا اختبار للاتصال'
-          }]
-        }],
-        generationConfig: {
-          temperature: 0.7,
-          maxOutputTokens: 100
-        }
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('❌ Gemini API test failed:', errorData);
-      return res.status(400).json({
-        success: false,
-        error: errorData.error?.message || 'Failed to connect to Gemini API'
-      });
-    }
-
-    const data = await response.json();
-    console.log('✅ Gemini API test successful');
-
-    res.json({
-      success: true,
-      message: 'Connection successful',
-      response: data.candidates?.[0]?.content?.parts?.[0]?.text || 'Test response received'
-    });
-  } catch (error) {
-    console.error('Error in POST /api/gemini/test:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Internal server error during test'
-    });
-  }
-});
+// تم نقل مسار test إلى gemini-routes.ts
 
 console.log('🔧 Setting up Categories API routes...');
 
@@ -218,6 +125,12 @@ app.get('/api/test-categories', (req, res) => {
 app.get('/api/gemini/test-route-2', (req, res) => {
   console.log('🧪 Test Gemini route 2 called!');
   res.json({ message: 'Gemini API is working from here!' });
+});
+
+// مسار مباشر لصفحة اختبار Gemini
+app.get('/test-gemini.html', (req, res) => {
+  console.log('🌐 Test Gemini HTML page requested');
+  res.sendFile('test-gemini.html', { root: process.cwd() });
 });
 
 // Categories API
@@ -990,8 +903,6 @@ app.post('/api/conversations/:id/messages', async (req, res) => {
   }
 });
 
-
-
 // Frontend logging endpoint - SIMPLE VERSION
 app.post('/api/frontend-log', (req, res) => {
   console.log('🔥 FRONTEND LOG ENDPOINT HIT!');
@@ -1032,8 +943,6 @@ app.post('/api/test-endpoint', (req, res) => {
   console.log('📝 Body:', req.body);
   res.json({ success: true, message: 'Test endpoint working!' });
 });
-
-
 
 // إرسال رسائل لفيسبوك (وسيط لتجنب مشاكل CORS)
 app.post('/api/facebook/send-message', async (req, res) => {
@@ -1216,8 +1125,6 @@ app.get('/api/facebook/page-settings/:pageId', async (req, res) => {
   }
 });
 
-
-
 // Webhook verification endpoint (for Facebook)
 app.get('/api/process-message', (req, res) => {
   const VERIFY_TOKEN = 'facebook_verify_token_123';
@@ -1255,6 +1162,14 @@ app.get('/api/process-message', (req, res) => {
   }
 });
 
+console.log('🔧 Setting up /api/process-message endpoint...');
+
+// Simple test endpoint first
+app.post('/api/test-simple', (req, res) => {
+  console.log('🧪 SIMPLE TEST ENDPOINT HIT!');
+  res.json({ success: true, message: 'Simple test working!' });
+});
+
 // Process message endpoint
 app.post('/api/process-message', async (req, res) => {
   console.log('🚀🚀🚀 POST /api/process-message endpoint hit! 🚀🚀🚀');
@@ -1262,9 +1177,12 @@ app.post('/api/process-message', async (req, res) => {
   console.log('📝 Full Body:', JSON.stringify(req.body));
 
   // إضافة try-catch للـ imports
+  let processIncomingMessage, validateMessageRequest;
   try {
     console.log('🔍 Testing imports...');
-    const { processIncomingMessage, validateMessageRequest } = await import('./process-message');
+    const imported = await import('./process-message');
+    processIncomingMessage = imported.processIncomingMessage;
+    validateMessageRequest = imported.validateMessageRequest;
     console.log('✅ Imports successful');
     console.log('🔍 processIncomingMessage:', typeof processIncomingMessage);
     console.log('🔍 validateMessageRequest:', typeof validateMessageRequest);
@@ -1733,6 +1651,175 @@ app.get('/test', (req, res) => {
   `);
 });
 
+// 📊 API للحصول على المحادثات (للتشخيص)
+app.get('/api/conversations', async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from('conversations')
+      .select('id, customer_name, customer_facebook_id, last_message, last_message_at')
+      .order('last_message_at', { ascending: false })
+      .limit(20);
+
+    if (error) throw error;
+
+    res.json(data || []);
+  } catch (error) {
+    console.error('Error fetching conversations:', error);
+    res.status(500).json({ error: 'Failed to fetch conversations' });
+  }
+});
+
+// 📨 API للحصول على الرسائل الأخيرة (للتشخيص)
+app.get('/api/messages/recent', async (req, res) => {
+  try {
+    // أولاً جلب الرسائل
+    const { data: messages, error: messagesError } = await supabase
+      .from('messages')
+      .select('id, conversation_id, content, sender_type, created_at, facebook_message_id')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (messagesError) throw messagesError;
+
+    // ثم جلب أسماء العملاء
+    const conversationIds = [...new Set(messages?.map(m => m.conversation_id) || [])];
+    const { data: conversations, error: conversationsError } = await supabase
+      .from('conversations')
+      .select('id, customer_name')
+      .in('id', conversationIds);
+
+    if (conversationsError) throw conversationsError;
+
+    // دمج البيانات
+    const conversationMap = new Map(conversations?.map(c => [c.id, c.customer_name]) || []);
+    const enrichedMessages = messages?.map(msg => ({
+      ...msg,
+      customer_name: conversationMap.get(msg.conversation_id) || 'غير معروف'
+    })) || [];
+
+    res.json(enrichedMessages);
+  } catch (error) {
+    console.error('Error fetching recent messages:', error);
+    res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// 📤 API لإرسال رسالة اختبار (للتشخيص)
+app.post('/api/send-message', async (req, res) => {
+  try {
+    const { conversation_id, content, sender_type = 'admin' } = req.body;
+
+    if (!conversation_id || !content) {
+      return res.status(400).json({ error: 'conversation_id and content are required' });
+    }
+
+    console.log(`📤 [DEBUG] Sending test message: "${content}" to conversation: ${conversation_id}`);
+
+    // حفظ الرسالة في قاعدة البيانات
+    const { data: savedMessage, error: saveError } = await supabase
+      .from('messages')
+      .insert({
+        conversation_id,
+        content,
+        sender_type,
+        is_read: false,
+        is_auto_reply: false,
+        is_ai_generated: false
+      })
+      .select()
+      .single();
+
+    if (saveError) {
+      console.error('❌ [DEBUG] Error saving message:', saveError);
+      throw saveError;
+    }
+
+    console.log(`✅ [DEBUG] Message saved with ID: ${savedMessage.id}`);
+
+    // جلب معلومات المحادثة للإرسال عبر Facebook
+    const { data: conversation, error: convError } = await supabase
+      .from('conversations')
+      .select('customer_facebook_id, facebook_page_id')
+      .eq('id', conversation_id)
+      .single();
+
+    if (convError) {
+      console.error('❌ [DEBUG] Error fetching conversation:', convError);
+      throw convError;
+    }
+
+    // جلب إعدادات Facebook
+    const { data: fbSettings, error: fbError } = await supabase
+      .from('facebook_settings')
+      .select('access_token')
+      .eq('page_id', conversation.facebook_page_id)
+      .single();
+
+    if (fbError || !fbSettings) {
+      console.log('⚠️ [DEBUG] No Facebook settings found, message saved to DB only');
+      return res.json({
+        success: true,
+        message: 'Message saved to database (no Facebook sending)',
+        messageId: savedMessage.id
+      });
+    }
+
+    // إرسال عبر Facebook API
+    try {
+      const facebookResponse = await fetch(
+        `https://graph.facebook.com/v21.0/me/messages?access_token=${fbSettings.access_token}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            recipient: { id: conversation.customer_facebook_id },
+            message: { text: content }
+          })
+        }
+      );
+
+      const facebookResult = await facebookResponse.json();
+
+      if (facebookResponse.ok && !facebookResult.error) {
+        console.log(`✅ [DEBUG] Message sent via Facebook: ${facebookResult.message_id}`);
+
+        // تحديث الرسالة بمعرف Facebook
+        await supabase
+          .from('messages')
+          .update({ facebook_message_id: facebookResult.message_id })
+          .eq('id', savedMessage.id);
+
+        res.json({
+          success: true,
+          message: 'Message sent successfully',
+          messageId: savedMessage.id,
+          facebookMessageId: facebookResult.message_id
+        });
+      } else {
+        console.error('❌ [DEBUG] Facebook API error:', facebookResult);
+        res.json({
+          success: true,
+          message: 'Message saved to database but Facebook sending failed',
+          messageId: savedMessage.id,
+          facebookError: facebookResult.error
+        });
+      }
+    } catch (facebookError) {
+      console.error('❌ [DEBUG] Facebook request failed:', facebookError);
+      res.json({
+        success: true,
+        message: 'Message saved to database but Facebook request failed',
+        messageId: savedMessage.id,
+        error: facebookError.message
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ [DEBUG] Error in send-message:', error);
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({
@@ -1741,11 +1828,33 @@ app.use((req, res) => {
   });
 });
 
+// Add in-memory logs storage for debugging UI
+const logs: { timestamp: string, message: string }[] = [];
+const MAX_LOGS = 1000; // Limit to prevent memory issues
+
+const originalConsoleLog = console.log;
+console.log = function(...args) {
+    originalConsoleLog.apply(console, args);
+    const message = args.map(arg => typeof arg === 'object' ? JSON.stringify(arg) : arg).join(' ');
+    logs.push({ timestamp: new Date().toISOString(), message });
+    if (logs.length > MAX_LOGS) {
+        logs.shift(); // Remove oldest log to maintain size limit
+    }
+};
+
+// Add endpoint for logs retrieval
+app.get('/api/logs', (req, res) => {
+    res.json(logs);
+});
+
 // Start server
 const server = app.listen(PORT, () => {
   console.log(`🚀 Message Processing API started on port ${PORT}`);
   console.log(`📡 Available at: http://localhost:${PORT}`);
   console.log(`🔗 Process message endpoint: http://localhost:${PORT}/api/process-message`);
+  console.log(`🔗 Debug conversations endpoint: http://localhost:${PORT}/api/conversations`);
+  console.log(`🔗 Debug messages endpoint: http://localhost:${PORT}/api/messages/recent`);
+  console.log(`🔗 Debug send message endpoint: http://localhost:${PORT}/api/send-message`);
 
   // بدء تشغيل الخدمات الاضافية
   try {

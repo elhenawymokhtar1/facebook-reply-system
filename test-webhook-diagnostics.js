@@ -5,7 +5,9 @@
  * يختبر جميع endpoints ووظائف التشخيص
  */
 
+
 import axios from 'axios';
+import colors from 'colors';
 
 const WEBHOOK_URL = 'http://localhost:3001';
 const NGROK_API_URL = 'http://localhost:4040/api/tunnels';

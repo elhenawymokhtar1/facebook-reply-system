@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>سجلات التطبيق</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f0f2f5;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+            direction: rtl;
+        }
+        h1 {
+            color: #1a73e8;
+            text-align: center;
+        }
+        #logs-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            max-width: 90%;
+            margin: 0 auto;
+            height: 70vh;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+        }
+        .log-entry {
+            border-bottom: 1px solid #eee;
+            padding: 10px 0;
+            font-size: 14px;
+        }
+        .log-timestamp {
+            color: #888;
+            margin-left: 10px;
+            font-weight: bold;
+        }
+        .log-level {
+            font-weight: bold;
+            margin-left: 5px;
+        }
+        .log-level-error {
+            color: #dc3545;
+        }
+        .log-level-info {
+            color: #17a2b8;
+        }
+        .log-level-debug {
+            color: #6c757d;
+        }
+        #controls {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        button {
+            background-color: #1a73e8;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #1557b0;
+        }
+    </style>
+</head>
+<body>
+    <h1>سجلات التطبيق</h1>
+    <div id="controls">
+        <button onclick="fetchLogs()">تحديث السجلات</button>
+        <button onclick="toggleAutoRefresh()" id="auto-refresh-btn">تفعيل التحديث التلقائي</button>
+        <button onclick="clearLogs()">مسح السجلات</button>
+    </div>
+    <div id="logs-container"></div>
+
+    <script>
+        let autoRefreshInterval = null;
+        let isAutoRefreshing = false;
+
+        function formatDate(date) {
+            return date.toLocaleString('ar-EG', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        }
+
+        function parseLogLevel(message) {
+            if (message.includes('Error') || message.includes('Exception') || message.includes('Failed')) {
+                return { level: 'ERROR', className: 'log-level-error' };
+            } else if (message.includes('✅') || message.includes('Found') || message.includes('received')) {
+                return { level: 'INFO', className: 'log-level-info' };
+            } else {
+                return { level: 'DEBUG', className: 'log-level-debug' };
+            }
+        }
+
+        function displayLogs(logs) {
+            const container = document.getElementById('logs-container');
+            container.innerHTML = '';
+            if (!logs || logs.length === 0) {
+                container.innerHTML = '<p style="text-align: center; color: #888;">لا توجد سجلات متاحة حاليًا.</p>';
+                return;
+            }
+            logs.forEach(log => {
+                const logDiv = document.createElement('div');
+                logDiv.className = 'log-entry';
+                const timestamp = log.timestamp ? formatDate(new Date(log.timestamp)) : formatDate(new Date());
+                const { level, className } = parseLogLevel(log.message);
+                logDiv.innerHTML = `<span class="log-timestamp">[${timestamp}]</span> <span class="log-level ${className}">${level}</span>: ${log.message}`;
+                container.appendChild(logDiv);
+            });
+            container.scrollTop = container.scrollHeight;
+        }
+
+        async function fetchLogs() {
+            try {
+                const response = await fetch('http://localhost:3004/api/logs');
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const logs = await response.json();
+                displayLogs(logs);
+            } catch (error) {
+                console.error('Error fetching logs:', error);
+                displayLogs([{ timestamp: new Date().toISOString(), message: `خطأ في جلب السجلات: ${error.message}` }]);
+            }
+        }
+
+        function toggleAutoRefresh() {
+            if (isAutoRefreshing) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+                isAutoRefreshing = false;
+                document.getElementById('auto-refresh-btn').innerText = 'تفعيل التحديث التلقائي';
+            } else {
+                autoRefreshInterval = setInterval(fetchLogs, 5000);
+                isAutoRefreshing = true;
+                document.getElementById('auto-refresh-btn').innerText = 'إيقاف التحديث التلقائي';
+            }
+        }
+
+        function clearLogs() {
+            document.getElementById('logs-container').innerHTML = '<p style="text-align: center; color: #888;">تم مسح السجلات.</p>';
+            if (isAutoRefreshing) {
+                toggleAutoRefresh();
+            }
+        }
+
+        // جلب السجلات عند تحميل الصفحة
+        window.onload = fetchLogs;
+    </script>
+</body>
+</html>

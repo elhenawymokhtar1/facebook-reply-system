@@ -44,8 +44,10 @@ export const useMessages = (conversationId: string | null) => {
     },
     enabled: !!conversationId,
     retry: 2,
-    staleTime: 0,
-    gcTime: 0,
+    staleTime: 5000, // البيانات تبقى fresh لمدة 5 ثواني
+    gcTime: 30000,   // الاحتفاظ بالـ cache لمدة 30 ثانية
+    refetchOnWindowFocus: false, // لا تعيد التحميل عند التركيز على النافذة
+    refetchOnMount: false, // لا تعيد التحميل عند mount إذا كانت البيانات fresh
   });
 
   // إرسال رسالة جديدة
@@ -259,17 +261,22 @@ export const useMessages = (conversationId: string | null) => {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
-      queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      // تأخير التحديث لتجنب التداخل مع real-time subscription
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+        queryClient.invalidateQueries({ queryKey: ['conversations'] });
+      }, 1000); // انتظار ثانية واحدة
     }
   });
 
-  // استمع للرسائل الجديدة والتحديثات
+  // استمع للرسائل الجديدة والتحديثات مع تحسين لتجنب التكرار
   useEffect(() => {
     if (!conversationId) return;
 
     // تسجيل الاستماع لبدء عملية الاشتراك
     console.log('🔄 Setting up message subscription for conversation:', conversationId);
+
+    let debounceTimeout: NodeJS.Timeout;
 
     const channel = supabase
       .channel(`messages-${conversationId}`)
@@ -282,8 +289,13 @@ export const useMessages = (conversationId: string | null) => {
           filter: `conversation_id=eq.${conversationId}`
         },
         (payload) => {
-          console.log('📥 New message received:', payload);
-          queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+          console.log('📥 New message received via real-time:', payload);
+
+          // تجنب التحديث المضاعف باستخدام debounce
+          clearTimeout(debounceTimeout);
+          debounceTimeout = setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+          }, 500); // انتظار 500ms قبل التحديث
         }
       )
       .on(
@@ -295,8 +307,13 @@ export const useMessages = (conversationId: string | null) => {
           filter: `conversation_id=eq.${conversationId}`
         },
         (payload) => {
-          console.log('🔄 Message updated:', payload);
-          queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+          console.log('🔄 Message updated via real-time:', payload);
+
+          // تجنب التحديث المضاعف باستخدام debounce
+          clearTimeout(debounceTimeout);
+          debounceTimeout = setTimeout(() => {
+            queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+          }, 500); // انتظار 500ms قبل التحديث
         }
       )
       .subscribe((status) => {
@@ -304,11 +321,12 @@ export const useMessages = (conversationId: string | null) => {
       });
 
     return () => {
+      clearTimeout(debounceTimeout);
       supabase.removeChannel(channel);
     };
-  }, [conversationId, queryClient]);
+  }, [conversationId]); // إزالة queryClient من dependencies
 
-  // تحديث حالة الرسالة
+  // تحديث حالة الرسالة مع تجنب التحديث المضاعف
   const updateMessageStatus = useMutation({
     mutationFn: async ({ messageId, status }: { messageId: string; status: string }) => {
       const { error } = await supabase
@@ -321,11 +339,14 @@ export const useMessages = (conversationId: string | null) => {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+      // تأخير التحديث لتجنب التداخل مع real-time
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+      }, 800);
     }
   });
 
-  // تحديث حالة عدة رسائل
+  // تحديث حالة عدة رسائل مع تجنب التحديث المضاعف
   const updateMultipleMessagesStatus = useMutation({
     mutationFn: async ({ messageIds, status }: { messageIds: string[]; status: string }) => {
       const { error } = await supabase
@@ -338,7 +359,10 @@ export const useMessages = (conversationId: string | null) => {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+      // تأخير التحديث لتجنب التداخل مع real-time
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+      }, 800);
     }
   });
 

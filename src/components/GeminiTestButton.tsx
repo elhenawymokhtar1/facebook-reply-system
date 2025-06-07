@@ -19,17 +19,16 @@ export const GeminiTestButton: React.FC<GeminiTestButtonProps> = ({
   const { toast } = useToast();
 
   const handleTestGemini = () => {
-    if (!lastMessage) {
-      toast({
-        title: "خطأ",
-        description: "لا توجد رسالة لاختبار Gemini AI عليها",
-        variant: "destructive",
-      });
-      return;
-    }
+    // استخدام رسالة اختبار ثابتة بدلاً من آخر رسالة لتجنب التكرار
+    const testMessage = "اختبار الذكاء الاصطناعي - مرحبا";
+
+    toast({
+      title: "جاري الاختبار",
+      description: "يتم اختبار Gemini AI الآن...",
+    });
 
     sendMessage.mutate({
-      message: lastMessage,
+      message: testMessage,
       conversationId,
       senderId
     });
@@ -40,15 +39,15 @@ export const GeminiTestButton: React.FC<GeminiTestButtonProps> = ({
       variant="outline"
       size="sm"
       onClick={handleTestGemini}
-      disabled={isLoading || !lastMessage}
-      className="flex items-center gap-2"
+      disabled={isLoading}
+      className="flex items-center gap-2 bg-blue-50 hover:bg-blue-100 border-blue-200 text-blue-700"
     >
       {isLoading ? (
         <Loader2 className="h-4 w-4 animate-spin" />
       ) : (
         <Bot className="h-4 w-4" />
       )}
-      اختبار Gemini AI
+      اختبار AI
     </Button>
   );
 };

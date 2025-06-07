@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
-import { GeminiAiService, GeminiSettings } from "@/services/geminiAi";
+import { GeminiMessageProcessor } from "@/services/geminiMessageProcessor";
+import { GeminiSettings } from "@/services/geminiAiSimplified";
 import { useToast } from "@/hooks/use-toast";
 
 export const useGeminiSettings = () => {
@@ -120,7 +121,7 @@ export const useGeminiChat = () => {
       conversationId: string;
       senderId: string;
     }) => {
-      return await GeminiAiService.processIncomingMessage(message, conversationId, senderId);
+      return await GeminiMessageProcessor.processIncomingMessage(message, conversationId, senderId);
     },
     onSuccess: (success) => {
       if (success) {

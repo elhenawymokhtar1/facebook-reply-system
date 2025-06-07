@@ -22,11 +22,9 @@ const Navigation = () => {
   const navItems = [
     { to: "/", icon: Home, label: "الرئيسية" },
     { to: "/conversations", icon: MessageCircle, label: "المحادثات" },
-    { to: "/facebook-management", icon: Facebook, label: "إدارة Facebook" },
     { to: "/orders", icon: Package, label: "الطلبات" },
     { to: "/products", icon: ShoppingBag, label: "المنتجات (بسيط)" },
-    { to: "/products-variants", icon: Layers, label: "المنتجات والمتغيرات" },
-    { to: "/product-images", icon: Palette, label: "الألوان والصور" },
+    { to: "/products-variants", icon: Palette, label: "🎨 الألوان والمنتجات الذكية" },
     { to: "/responses", icon: MessageSquare, label: "الردود الآلية" },
     { to: "/analytics", icon: BarChart3, label: "الإحصائيات" },
     { to: "/settings", icon: Settings, label: "الإعدادات" }

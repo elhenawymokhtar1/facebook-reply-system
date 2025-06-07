@@ -413,13 +413,15 @@ const ChatWindow = ({ conversationId }: ChatWindowProps) => {
         <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
           <div className="flex items-center gap-2">
             <span>اضغط Enter للإرسال، Shift+Enter لسطر جديد</span>
+          </div>
+          <div className="flex items-center gap-2">
             <GeminiTestButton
               conversationId={conversationId}
               senderId={conversation.customer_facebook_id}
               lastMessage={messages[messages.length - 1]?.content}
             />
+            <span className="text-green-600">متصل</span>
           </div>
-          <span className="text-green-600">متصل</span>
         </div>
       </div>
     </Card>

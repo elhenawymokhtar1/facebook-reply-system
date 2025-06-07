@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { FacebookApiService } from "./facebookApi";
-import { GeminiAiService } from "./geminiAi";
+import { GeminiMessageProcessor } from "./geminiMessageProcessor";
 
 // إعداد Supabase
 const supabaseUrl = 'https://ddwszecfsfkjnahesymm.supabase.co';
@@ -59,6 +59,47 @@ export class AutoReplyService {
     try {
       console.log(`🔍 Processing message: "${message}" for sender: ${senderId}`);
 
+      // فحص إذا كانت هذه الرسالة مرسلة من الصفحة (admin) لتجنب المعالجة المضاعفة
+      if (conversationId) {
+        const { data: existingMessages } = await supabase
+          .from('messages')
+          .select('id, sender_type, created_at')
+          .eq('conversation_id', conversationId)
+          .eq('content', message)
+          .order('created_at', { ascending: false })
+          .limit(5); // فحص آخر 5 رسائل مطابقة
+
+        if (existingMessages && existingMessages.length > 0) {
+          // فحص إذا كانت هناك رسالة admin حديثة (خلال آخر 5 ثوانٍ)
+          const recentAdminMessage = existingMessages.find(msg => {
+            const messageTime = new Date(msg.created_at).getTime();
+            const now = new Date().getTime();
+            const timeDiff = now - messageTime;
+            return msg.sender_type === 'admin' && timeDiff < 5000; // أقل من 5 ثوانٍ
+          });
+
+          // فحص إذا كانت هناك رسالة bot حديثة بنفس المحتوى (خلال آخر 10 ثوانٍ)
+          const recentBotMessage = existingMessages.find(msg => {
+            const messageTime = new Date(msg.created_at).getTime();
+            const now = new Date().getTime();
+            const timeDiff = now - messageTime;
+            return msg.sender_type === 'bot' && timeDiff < 10000; // أقل من 10 ثوانٍ
+          });
+
+          if (recentAdminMessage) {
+            console.log('⚠️ Recent admin message found, skipping auto-reply to avoid duplication');
+            console.log(`📅 Admin message time: ${recentAdminMessage.created_at}`);
+            return false;
+          }
+
+          if (recentBotMessage) {
+            console.log('⚠️ Recent bot message with same content found, skipping auto-reply to avoid duplication');
+            console.log(`📅 Bot message time: ${recentBotMessage.created_at}`);
+            return false;
+          }
+        }
+      }
+
       // أولاً: البحث عن رد آلي تقليدي
       const matchingReply = await this.findMatchingReply(message);
 
@@ -78,8 +119,8 @@ export class AutoReplyService {
       }
 
       // التحقق من حالة Gemini AI
-      const { GeminiAiService } = await import('./geminiAi');
-      const geminiSettings = await GeminiAiService.getGeminiSettings();
+      const { GeminiAiServiceSimplified } = await import('./geminiAiSimplified');
+      const geminiSettings = await GeminiAiServiceSimplified.getGeminiSettings();
 
       if (!geminiSettings || !geminiSettings.is_enabled) {
         console.log('🚫 Gemini AI is disabled - sending default response');
@@ -104,15 +145,13 @@ export class AutoReplyService {
       }
 
       console.log(`🚀 Calling Gemini AI for conversation: ${conversationId}`);
-      console.log('🔍 About to call GeminiAiService.processIncomingMessage with:', { message, conversationId, senderId });
-      console.log('🔍 GeminiAiService object:', GeminiAiService);
-      console.log('🔍 processIncomingMessage function:', GeminiAiService.processIncomingMessage);
-      const geminiSuccess = await GeminiAiService.processIncomingMessage(
+      console.log('🔍 About to call GeminiMessageProcessor.processIncomingMessage with:', { message, conversationId, senderId });
+      const geminiSuccess = await GeminiMessageProcessor.processIncomingMessage(
         message,
         conversationId,
         senderId
       );
-      console.log('🔍 GeminiAiService.processIncomingMessage returned:', geminiSuccess);
+      console.log('🔍 GeminiMessageProcessor.processIncomingMessage returned:', geminiSuccess);
 
       if (geminiSuccess) {
         console.log('✅ Gemini AI response sent successfully');

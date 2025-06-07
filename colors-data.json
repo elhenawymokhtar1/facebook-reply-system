@@ -100,5 +100,19 @@
       "black"
     ],
     "is_active": true
+  },
+  {
+    "id": "8",
+    "color_key": "green",
+    "arabic_name": "????",
+    "english_name": "Green",
+    "image_url": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300",
+    "keywords": [
+      "????",
+      "????",
+      "??????",
+      "green"
+    ],
+    "is_active": true
   }
 ]

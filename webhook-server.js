@@ -1,3 +1,35 @@
+/**
+ * ⚠️ LEGACY WEBHOOK SERVER - DISABLED TO AVOID DUPLICATION
+ *
+ * هذا الخادم معطل لتجنب التداخل مع الخادم الرئيسي
+ * الخادم الرئيسي يعمل على المنفذ 3002 في src/api/server.ts
+ *
+ * جميع الرسائل تتم معالجتها عبر الخادم الرئيسي
+ */
+
+// Global Error Handlers
+process.on('uncaughtException', (error, origin) => {
+  console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+  console.error('!!!! خطأ فادح: استثناء غير مُلتقط (Uncaught Exception) !!!!');
+  console.error('!!!! تفاصيل الخطأ:', error);
+  console.error('!!!! مصدر الخطأ:', origin);
+  console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+  // في بيئة الإنتاج، يُفضل إنهاء العملية هنا: process.exit(1);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+  console.error('!!!! خطأ فادح: Promise مرفوض ولم يتم معالجته (Unhandled Rejection) !!!!');
+  console.error('!!!! سبب الرفض:', reason);
+  console.error('!!!! الـ Promise:', promise);
+  console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+  // في بيئة الإنتاج، يُفضل إنهاء العملية هنا: process.exit(1);
+});
+// نهاية Global Error Handlers
+console.log('<<<<< SCRIPT STARTED, GLOBAL HANDLERS REGISTERED >>>>>');
+console.log('FACEBOOK_APP_ID from env:', process.env.FACEBOOK_APP_ID);
+console.log('Type of FACEBOOK_APP_ID:', typeof process.env.FACEBOOK_APP_ID);
+
 // 🔗 Facebook Webhook Server الموحد
 // منفذ واحد فقط - كود بسيط ومنظم
 
@@ -14,7 +46,7 @@ const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 // إعدادات Facebook
-const VERIFY_TOKEN = 'facebook_webhook_verify_token_2024';
+const VERIFY_TOKEN = '2xf2Xy5edVL0ZkYq69i60TukXj1_dJAUo7qKWTRVLt5KXcTH';
 
 // Middleware
 app.use(cors());
@@ -64,143 +96,35 @@ app.get('/webhook', (req, res) => {
   }
 });
 
-// 📨 Facebook Webhook Messages (POST)
+// 📨 Facebook Webhook Messages (POST) - DISABLED TO AVOID DUPLICATION
 app.post('/webhook', async (req, res) => {
   const body = req.body;
 
-  console.log('🔔 WEBHOOK RECEIVED!');
+  console.log('🔔 WEBHOOK RECEIVED ON LEGACY SERVER - IGNORING TO AVOID DUPLICATION!');
   console.log('📨 Data:', JSON.stringify(body, null, 2));
 
   // تحديث الإحصائيات
   systemStats.messagesReceived++;
   systemStats.lastMessageTime = new Date().toLocaleTimeString('ar-EG');
 
-  try {
-    // التحقق من أن الطلب من Facebook
-    if (body.object !== 'page') {
-      console.log('⚠️ Not a page event, ignoring');
-      return res.status(200).send('OK');
-    }
-
-    // معالجة كل entry
-    for (const entry of body.entry || []) {
-      const pageId = entry.id;
-      console.log(`📄 Processing page: ${pageId}`);
-
-      // معالجة الرسائل
-      for (const messaging of entry.messaging || []) {
-        await processMessage(messaging, pageId);
-      }
-    }
-
-    res.status(200).send('OK');
-
-  } catch (error) {
-    console.error('❌ Error processing webhook:', error);
-
-    // إضافة الخطأ للإحصائيات
-    systemStats.errors.push({
-      timestamp: new Date().toISOString(),
-      error: error.message,
-      stack: error.stack
-    });
-
-    // الاحتفاظ بآخر 50 خطأ فقط
-    if (systemStats.errors.length > 50) {
-      systemStats.errors = systemStats.errors.slice(-50);
-    }
-
-    res.status(500).send('Internal Server Error');
-  }
+  // إرسال استجابة فورية دون معالجة لتجنب التكرار
+  console.log('⚠️ Legacy webhook server - messages are processed by main API server on port 3002');
+  res.status(200).send('OK');
 });
 
-// 🔄 معالجة الرسائل
+// 🔄 معالجة الرسائل - DISABLED TO AVOID DUPLICATION WITH MAIN API SERVER
 async function processMessage(messaging, pageId) {
-  console.log('🔄 Processing message:', messaging);
-
-  // 🔍 فحص حالة الصفحة أولاً
-  console.log('🔍 فحص حالة الصفحة...');
-  try {
-    const { data: pageSettings, error: pageError } = await supabase
-      .from('facebook_settings')
-      .select('is_active, page_name, disconnected_at, access_token')
-      .eq('page_id', pageId)
-      .single();
-
-    if (pageError) {
-      console.log('⚠️ لم يتم العثور على إعدادات الصفحة:', pageError.message);
-      // نكمل المعالجة للصفحات غير المسجلة
-    } else if (pageSettings) {
-      console.log(`📊 حالة الصفحة "${pageSettings.page_name}":`, {
-        is_active: pageSettings.is_active,
-        disconnected_at: pageSettings.disconnected_at,
-        has_access_token: !!pageSettings.access_token
-      });
-
-      // إذا كانت الصفحة معطلة، نتجاهل الرسالة
-      if (pageSettings.is_active === false) {
-        console.log(`🚫 الصفحة "${pageSettings.page_name}" معطلة - تم تجاهل الرسالة`);
-        console.log(`📅 تاريخ قطع الاتصال: ${pageSettings.disconnected_at}`);
-
-        // إضافة إحصائية للرسائل المتجاهلة
-        systemStats.messagesIgnored = (systemStats.messagesIgnored || 0) + 1;
-        systemStats.lastIgnoredMessage = {
-          pageId: pageId,
-          pageName: pageSettings.page_name,
-          senderId: messaging.sender?.id,
-          timestamp: new Date().toISOString(),
-          reason: 'page_disabled'
-        };
-
-        return; // توقف هنا ولا تعالج الرسالة
-      }
-
-      // إذا لم يكن هناك Access Token، نتجاهل الرسالة
-      if (!pageSettings.access_token) {
-        console.log(`🔑 الصفحة "${pageSettings.page_name}" بدون Access Token - تم تجاهل الرسالة`);
-
-        // إضافة إحصائية للرسائل المتجاهلة
-        systemStats.messagesIgnored = (systemStats.messagesIgnored || 0) + 1;
-        systemStats.lastIgnoredMessage = {
-          pageId: pageId,
-          pageName: pageSettings.page_name,
-          senderId: messaging.sender?.id,
-          timestamp: new Date().toISOString(),
-          reason: 'no_access_token'
-        };
-
-        return; // توقف هنا ولا تعالج الرسالة
-      }
-
-      console.log(`✅ الصفحة "${pageSettings.page_name}" نشطة ولديها Access Token - متابعة المعالجة`);
-    }
-  } catch (checkError) {
-    console.error('❌ خطأ في فحص حالة الصفحة:', checkError);
-    // نكمل المعالجة في حالة الخطأ
-  }
-
-  try {
-    // معالجة الرسائل المرسلة من الصفحة (Echo)
-    if (messaging.message?.is_echo) {
-      await handleEchoMessage(messaging, pageId);
-      return;
-    }
-
-    // معالجة الرسائل الواردة من العملاء
-    if (messaging.message) {
-      await handleCustomerMessage(messaging, pageId);
-      return;
-    }
-
-    console.log('⚠️ Unknown message type, ignoring');
-
-  } catch (error) {
-    console.error('❌ Error in processMessage:', error);
-  }
+  console.log('🔄 Legacy processMessage called - SKIPPING to avoid duplication with main API server');
+  console.log('📨 Message data:', JSON.stringify(messaging, null, 2));
+  console.log('📄 Page ID:', pageId);
+  console.log('⚠️ This legacy webhook server is disabled - messages are processed by main API server on port 3002');
+  return; // Exit early to avoid any processing
 }
 
 // 📤 معالجة الرسائل المرسلة من الصفحة
 async function handleEchoMessage(messaging, pageId) {
+  console.log('<<<<< ENTERING handleEchoMessage with messaging: >>>>>', JSON.stringify(messaging, null, 2));
+  try {
   console.log('📤 Echo message from page');
 
   const customerId = messaging.recipient.id;
@@ -218,16 +142,23 @@ async function handleEchoMessage(messaging, pageId) {
     let isCampaign = false;
     let campaignId = null;
 
-    // فحص إذا كانت الرسالة من التطبيق نفسه
-    if (appId && appId === process.env.FACEBOOK_APP_ID) {
-      messageType = 'admin';
+    const metadata = messaging.message.metadata;
+
+    if (metadata === "AUTO_REPLY_BOT_V1") {
+      messageType = 'bot';
+      isAutoReply = true;
+      console.log('🤖 Bot auto-reply echo received');
+    } else if (appId && typeof process.env.FACEBOOK_APP_ID === 'string' && process.env.FACEBOOK_APP_ID.length > 0 && appId.toString() === process.env.FACEBOOK_APP_ID) {
+      messageType = 'admin'; // Message sent manually from our app by an admin
       isAutoReply = false;
-      console.log('📱 Message sent from our app');
+      console.log('📱 Message sent from our app (manual admin)');
     } else {
       // رسالة من مودريتور خارجي أو حملة
       console.log('👤 Message sent from external moderator or campaign');
+      messageType = 'admin'; // Default to admin for external messages
+      isAutoReply = false;
 
-      // فحص إذا كانت رسالة حملة
+      // فحص إذا كانت رسالة حملة (هذا المنطق يمكن أن يبقى أو يُعدل حسب الحاجة)
       const campaignKeywords = ['عرض خاص', 'تخفيض', 'حملة', 'استهداف'];
       const isCampaignMessage = campaignKeywords.some(keyword =>
         messageText.includes(keyword)
@@ -239,7 +170,23 @@ async function handleEchoMessage(messaging, pageId) {
       }
     }
 
-    // حفظ الرسالة المرسلة من الصفحة
+    // فحص إذا كانت الرسالة محفوظة مسبقاً لتجنب التكرار
+    const { data: existingMessage } = await supabase
+      .from('messages')
+      .select('id')
+      .eq('conversation_id', conversation.id)
+      .eq('content', messageText)
+      .eq('sender_type', messageType)
+      .gte('created_at', new Date(Date.now() - 30000).toISOString()) // خلال آخر 30 ثانية
+      .single();
+
+    if (existingMessage) {
+      console.log('⚠️ Message already exists in database, skipping save to avoid duplication');
+      console.log(`📋 Existing message ID: ${existingMessage.id}`);
+      return; // تجاهل الحفظ
+    }
+
+    // حفظ الرسالة المرسلة من الصفحة (فقط إذا لم تكن محفوظة مسبقاً)
     const { error } = await supabase
       .from('messages')
       .insert({
@@ -280,10 +227,26 @@ async function handleEchoMessage(messaging, pageId) {
       }
     }
   }
+} catch (error) {
+    console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    console.error('!!!! CRITICAL ERROR IN handleEchoMessage !!!!');
+    console.error('!!!! Error Message:', error.message);
+    console.error('!!!! Error Stack:', error.stack);
+    try {
+      console.error('!!!! Error Object (Serialized):', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    } catch (serializeError) {
+      console.error('!!!! Error Object (Could not serialize):', error);
+    }
+    console.error('!!!! Messaging Object (handleEchoMessage):', JSON.stringify(messaging, null, 2));
+    console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+  }
+  console.log('<<<<< EXITING handleEchoMessage >>>>>');
 }
 
 // 📨 معالجة الرسائل الواردة من العملاء
 async function handleCustomerMessage(messaging, pageId) {
+  console.log('<<<<< ENTERING handleCustomerMessage with messaging: >>>>>', JSON.stringify(messaging, null, 2));
+  try {
   console.log('📨 Customer message received');
 
   const customerId = messaging.sender.id;
@@ -338,11 +301,115 @@ async function handleCustomerMessage(messaging, pageId) {
     })
     .eq('id', conversation.id);
 
-  // تشغيل الرد الآلي
-  console.log('🤖 Triggering auto-reply...');
+  // تشغيل الرد الآلي مع Gemini AI
+  console.log('🤖 Triggering Gemini AI auto-reply...');
   try {
-    // يمكن إضافة الرد الآلي هنا لاحقاً
-    console.log('ℹ️ Auto-reply will be implemented later');
+    // استدعاء Gemini AI مباشرة
+    const geminiResponse = await fetch('http://localhost:3002/api/gemini/test', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        api_key: 'AIzaSyCeL3A69LBZvsuHmtIXd_s0AoGRCzwvBVU'
+      })
+    });
+
+    if (geminiResponse.ok) {
+      const result = await geminiResponse.json();
+      console.log('✅ Gemini AI test successful:', result);
+
+      // استدعاء Gemini AI مباشرة لتوليد الرد
+      console.log('🔄 Calling Gemini AI directly...');
+
+      const geminiApiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=AIzaSyCeL3A69LBZvsuHmtIXd_s0AoGRCzwvBVU`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: `انتي اسمك ساره بياعه شاطره اسلوبك كويس
+بتبعي كوتشيات حريمي  او سلبير
+اللي بيسئل بيسئل علي السلبير فالافتراض انه بيتكلم علي السلبير
+الالوان اللي موجوده للكوتشي ابيض احمر اسود جملي الازرق البيج
+والسعر 250 لو اكتر من قطعه هيكون في خصم 15 علي القطعه
+الشحن متوفر للقاهرو واسكندرية بس وسعر الشحن 50
+استخدمي لغه عاميه مصرية
+لما عميل يسئل علي عن صورة لون معين ابعتي له صورة اللون اللي هو عايز يشوف
+وردي علي قد السوال وبلاش كلام كتير
+استخدم السؤال المفتوح دايما بس بشكل مناسب
+وبلاش تتسرعي في طلب البيانات حاولي تطمني العميل دايما وتخليه يدخل علي الخطوه اللي بعدها
+بلاش تكرري التحيه هو اول مره ف المحادثة بس
+لو عميل عايز يشوف الالوان كله ابعتي الصور ورا بعض واحده واحده
+معظم اللي هيكلموكي بنات استخدمي لغه مؤنثه
+استخدمي اموجي وخلي الطريقة بتعتك فيها ود ومرح مع العميل
+وركز انك تعملي اوردر وتسجليه
+البيانات المطلوبه لعمل الاوردر
+الاسم العنوان رقم التلفون المقاس واللون
+
+رسالة العميل: ${messageText}`
+            }]
+          }],
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 1000,
+            topP: 0.8,
+            topK: 10
+          }
+        })
+      });
+
+      if (geminiApiResponse.ok) {
+        const geminiData = await geminiApiResponse.json();
+        const geminiReply = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (geminiReply) {
+          console.log('✅ Gemini AI generated reply:', geminiReply);
+
+          // إرسال الرد عبر Facebook API
+          const { data: facebookSettings } = await supabase
+            .from('facebook_settings')
+            .select('access_token')
+            .eq('page_id', pageId)
+            .single();
+
+          if (facebookSettings && facebookSettings.access_token) {
+            const facebookResponse = await fetch(`https://graph.facebook.com/v17.0/me/messages?access_token=${facebookSettings.access_token}`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                recipient: { id: customerId },
+                message: { 
+                  text: geminiReply,
+                  metadata: "AUTO_REPLY_BOT_V1" // Metadata to identify bot replies in echo
+                }
+              })
+            });
+
+            if (facebookResponse.ok) {
+              console.log('✅ Gemini reply sent to Facebook successfully!');
+
+              // حفظ الرد في قاعدة البيانات
+              // The bot's reply will be saved via the message_echo
+              // to avoid duplication. Ensure handleEchoMessage correctly
+              // identifies bot messages (e.g., via metadata or app_id).
+              console.log('🤖 Bot reply sent to Facebook, will be saved via echo.');
+
+            } else {
+              console.error('❌ Failed to send Gemini reply to Facebook');
+            }
+          }
+        }
+      } else {
+        console.error('❌ Gemini API failed:', geminiApiResponse.status);
+      }
+    } else {
+      console.error('❌ Gemini test failed:', geminiResponse.status);
+    }
   } catch (autoReplyError) {
     console.error('❌ Error in auto-reply:', autoReplyError);
 
@@ -353,6 +420,20 @@ async function handleCustomerMessage(messaging, pageId) {
       context: 'auto-reply'
     });
   }
+} catch (error) {
+    console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    console.error('!!!! CRITICAL ERROR IN handleCustomerMessage !!!!');
+    console.error('!!!! Error Message:', error.message);
+    console.error('!!!! Error Stack:', error.stack);
+    try {
+      console.error('!!!! Error Object (Serialized):', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    } catch (serializeError) {
+      console.error('!!!! Error Object (Could not serialize):', error);
+    }
+    console.error('!!!! Messaging Object (handleCustomerMessage):', JSON.stringify(messaging, null, 2));
+    console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+  }
+  console.log('<<<<< EXITING handleCustomerMessage >>>>>');
 }
 
 // 🔍 البحث عن المحادثة أو إنشاؤها
@@ -478,8 +559,21 @@ app.post('/test', (req, res) => {
   });
 
   // معالجة الرسالة في الخلفية
-  setTimeout(() => {
-    processWebhookData(testMessage);
+  setTimeout(async () => {
+    try {
+      // معالجة كل entry
+      for (const entry of testMessage.entry || []) {
+        const pageId = entry.id;
+        console.log(`📄 Processing test page: ${pageId}`);
+
+        // معالجة الرسائل
+        for (const messaging of entry.messaging || []) {
+          await processMessage(messaging, pageId);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error processing test message:', error);
+    }
   }, 100);
 });
 

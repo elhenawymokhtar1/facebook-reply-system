@@ -277,6 +277,45 @@ export class GeminiAiService {
       console.log(`🤖 Gemini AI: Processing message "${userMessage}" for sender ${senderId}`);
       console.log(`📍 Conversation ID: ${conversationId}`);
 
+      // فحص إذا كانت هذه الرسالة موجودة بالفعل كـ admin message لتجنب التكرار
+      const { data: existingMessages } = await supabase
+        .from('messages')
+        .select('id, sender_type, created_at')
+        .eq('conversation_id', conversationId)
+        .eq('content', userMessage)
+        .order('created_at', { ascending: false })
+        .limit(5); // فحص آخر 5 رسائل مطابقة
+
+      if (existingMessages && existingMessages.length > 0) {
+        // فحص إذا كانت هناك رسالة admin حديثة (خلال آخر 5 ثوانٍ)
+        const recentAdminMessage = existingMessages.find(msg => {
+          const messageTime = new Date(msg.created_at).getTime();
+          const now = new Date().getTime();
+          const timeDiff = now - messageTime;
+          return msg.sender_type === 'admin' && timeDiff < 5000; // أقل من 5 ثوانٍ
+        });
+
+        // فحص إذا كانت هناك رسالة bot حديثة بنفس المحتوى (خلال آخر 10 ثوانٍ)
+        const recentBotMessage = existingMessages.find(msg => {
+          const messageTime = new Date(msg.created_at).getTime();
+          const now = new Date().getTime();
+          const timeDiff = now - messageTime;
+          return msg.sender_type === 'bot' && timeDiff < 10000; // أقل من 10 ثوانٍ
+        });
+
+        if (recentAdminMessage) {
+          console.log('⚠️ Recent admin message found, skipping Gemini processing to avoid duplication');
+          console.log(`📅 Admin message time: ${recentAdminMessage.created_at}`);
+          return false;
+        }
+
+        if (recentBotMessage) {
+          console.log('⚠️ Recent bot message with same content found, skipping Gemini processing to avoid duplication');
+          console.log(`📅 Bot message time: ${recentBotMessage.created_at}`);
+          return false;
+        }
+      }
+
       // الحصول على إعدادات Gemini
       const settings = await this.getGeminiSettings();
       console.log('🔧 Gemini settings:', settings ? 'Found' : 'Not found');
@@ -325,10 +364,6 @@ export class GeminiAiService {
       // أولاً: محاولة إرسال كتالوج المنتجات الجديد
       const catalogSent = await this.checkAndSendProductCatalog(conversationId, userMessage);
 
-      // إذا لم يتم إرسال كتالوج، جرب النظام القديم للصور
-      if (!catalogSent) {
-        await this.checkAndSendProductImage(conversationId, userMessage);
-      }
 
       // تحليل المحادثة للبحث عن طلب محتمل
       await this.checkAndCreateOrder(conversationId, userMessage);
@@ -724,7 +759,6 @@ export class GeminiAiService {
     }
   }
 
-  // البحث في المنتجات وإرسال كتالوج ذكي
   static async checkAndSendProductCatalog(conversationId: string, userMessage: string): Promise<boolean> {
     try {
       // اكتشاف طلب المنتجات
@@ -742,126 +776,90 @@ export class GeminiAiService {
       console.log('🎨 Detected color:', requestedColor);
       console.log('📦 Detected category:', requestedCategory);
 
-      // البحث في المنتجات (النظام الجديد أولاً)
-      let products = [];
+      let products: any[] = [];
+      const baseUrl = 'http://localhost:3002/api/products-variants';
+
+      const transformProductData = (productsWithVariants: any[]): any[] => {
+        if (!Array.isArray(productsWithVariants)) {
+          console.error('transformProductData expected an array, received:', productsWithVariants);
+          return [];
+        }
+        return productsWithVariants.flatMap(product =>
+          (product.variants && Array.isArray(product.variants) ? product.variants : [])
+            .filter((v: any) => v.is_available && v.stock_quantity > 0) // Ensure variant is available and in stock
+            .map((variant: any) => ({
+              product_id: product.id,
+              product_name: product.name,
+              description: product.description,
+              category: product.category_name || product.category, // Handle potential differences in category field name
+              brand: product.brand,
+              color: variant.color,
+              size: variant.size,
+              price: variant.price,
+              stock_quantity: variant.stock_quantity,
+              image_url: variant.image_url,
+              sku: variant.sku
+            }))
+        );
+      };
 
       if (requestedColor) {
-        // جرب النظام الجديد أولاً
-        products = await searchProductsVariants(requestedColor);
-        // إذا لم نجد نتائج، جرب النظام القديم
-        if (products.length === 0) {
-          products = await searchProducts(requestedColor);
-        }
-      } else if (requestedCategory) {
-        products = await searchProductsVariants(requestedCategory);
-        if (products.length === 0) {
-          products = await searchProducts(requestedCategory);
-        }
-      } else {
-        // جلب المنتجات المتاحة من النظام الجديد
         try {
-          const response = await fetch('http://localhost:3002/api/products-variants');
+          console.log(`🔍 Searching products by color: ${requestedColor}`);
+          const response = await fetch(`${baseUrl}/search/color/${encodeURIComponent(requestedColor)}`);
           if (response.ok) {
             const productsWithVariants = await response.json();
-            // تحويل إلى تنسيق مبسط للعرض
-            products = productsWithVariants.flatMap(product =>
-              product.variants
-                .filter(v => v.is_available && v.stock_quantity > 0)
-                .map(variant => ({
-                  product_id: product.id,
-                  product_name: product.name,
-                  description: product.description,
-                  category: product.category,
-                  color: variant.color,
-                  size: variant.size,
-                  price: variant.price,
-                  stock_quantity: variant.stock_quantity,
-                  image_url: variant.image_url
-                }))
-            );
+            products = transformProductData(productsWithVariants);
+          } else {
+            console.error(`Error fetching products by color ${requestedColor}: ${response.status} ${response.statusText}`);
           }
         } catch (error) {
-          console.error('Error fetching products variants:', error);
-          // fallback للنظام القديم
-          const response = await fetch('http://localhost:3002/api/products/available');
+          console.error(`Exception fetching products variants by color ${requestedColor}:`, error);
+        }
+      } else if (requestedCategory) {
+        try {
+          console.log(`🔍 Searching products by category: ${requestedCategory}`);
+          const response = await fetch(`${baseUrl}/search/category/${encodeURIComponent(requestedCategory)}`);
           if (response.ok) {
-            products = await response.json();
+            const productsWithVariants = await response.json();
+            products = transformProductData(productsWithVariants);
+          } else {
+            console.error(`Error fetching products by category ${requestedCategory}: ${response.status} ${response.statusText}`);
           }
+        } catch (error) {
+          console.error(`Exception fetching products variants by category ${requestedCategory}:`, error);
+        }
+      } else {
+        // جلب جميع المنتجات المتاحة من النظام الجديد
+        try {
+          console.log('🔍 Fetching all available products-variants');
+          const response = await fetch(baseUrl); // Fetches all products with variants
+          if (response.ok) {
+            const productsWithVariants = await response.json();
+            products = transformProductData(productsWithVariants);
+          } else {
+            console.error(`Error fetching all products-variants: ${response.status} ${response.statusText}`);
+          }
+        } catch (error) {
+          console.error('Exception fetching all products variants:', error);
         }
       }
 
       if (products.length === 0) {
-        console.log('❌ No products found');
+        console.log('❌ No products found after attempting to fetch and transform.');
         await this.sendNoProductsMessage(conversationId, requestedColor, requestedCategory);
-        return true;
+        return true; // تم التعامل مع الحالة، لا يوجد خطأ هنا
       }
 
       console.log(`✅ Found ${products.length} products`);
 
       // إرسال كتالوج المنتجات
       await this.sendProductCatalog(conversationId, products, requestedColor, requestedCategory);
-      return true;
+      return true; // تم التعامل مع الحالة بنجاح
 
     } catch (error) {
-      console.error('Error checking and sending product catalog:', error);
-      return false;
-    }
-  }
-
-  // التحقق من طلبات الصور وإرسالها (النظام القديم كـ fallback)
-  static async checkAndSendProductImage(conversationId: string, userMessage: string): Promise<void> {
-    try {
-      // التحقق من وجود طلب صورة
-      if (!ProductImageService.isImageRequest(userMessage)) {
-        return;
-      }
-
-      console.log('🖼️ Image request detected:', userMessage);
-
-      // استخراج اللون المطلوب
-      const requestedColor = ProductImageService.detectColorInText(userMessage);
-
-      if (!requestedColor) {
-        console.log('❌ No color detected in image request');
-        return;
-      }
-
-      console.log('🎨 Color detected:', requestedColor);
-
-      // البحث عن صورة المنتج
-      const productImage = await ProductImageService.getProductImageByColor('كوتشي حريمي', requestedColor);
-
-      if (!productImage) {
-        console.log('❌ No image found for color:', requestedColor);
-
-        // إرسال رسالة اعتذار
-        const apologyMessage = `آسفة يا قمر! 😔 مش متوفر صورة للكوتشي باللون ${requestedColor} حالياً.
-
-بس عندنا ألوان تانية جميلة زي:
-🤍 الأبيض
-🖤 الأسود
-❤️ الأحمر
-💙 الأزرق
-
-عايزة تشوفي أي لون منهم؟ 😊`;
-
-        await this.sendMessageToCustomer(conversationId, apologyMessage);
-        return;
-      }
-
-      console.log('✅ Product image found:', productImage.image_filename);
-
-      // إنشاء رسالة مع الصورة
-      const imageMessage = ProductImageService.createImageMessage(productImage);
-      console.log('📝 Image message created:', imageMessage);
-
-      // إرسال الرسالة مع الصورة
-      console.log('🚀 Calling sendImageToCustomer...');
-      await this.sendImageToCustomer(conversationId, imageMessage, productImage.image_url);
-      console.log('✅ sendImageToCustomer completed');
-
-    } catch (error) {
-      console.error('Error checking and sending product image:', error);
+      console.error('Error in checkAndSendProductCatalog:', error);
+      return false; // Indicate that processing was not successful due to an error
     }
   }
 
@@ -951,7 +949,7 @@ export class GeminiAiService {
             // إرسال الصورة كـ attachment
             await facebookService.sendImage(
               facebookSettings.access_token,
-              conversation.customer_id,
+              conversation.customer_facebook_id,
               fullImageUrl
             );
 

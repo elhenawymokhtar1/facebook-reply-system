@@ -1,0 +1,122 @@
+[
+  {
+    "id": "1",
+    "color_key": "white",
+    "arabic_name": "أبيض",
+    "english_name": "White",
+    "image_url": "https://files.easy-orders.net/1744641208557436357.jpg",
+    "keywords": [
+      "ابيض",
+      "أبيض",
+      "الابيض",
+      "الأبيض",
+      "white"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "2",
+    "color_key": "red",
+    "arabic_name": "أحمر",
+    "english_name": "Red",
+    "image_url": "https://files.easy-orders.net/1744720320703143217.jpg",
+    "keywords": [
+      "احمر",
+      "أحمر",
+      "الاحمر",
+      "الأحمر",
+      "red"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "3",
+    "color_key": "black",
+    "arabic_name": "أسود",
+    "english_name": "Black",
+    "image_url": "https://files.easy-orders.net/1723117580290608498.jpg",
+    "keywords": [
+      "اسود",
+      "أسود",
+      "الاسود",
+      "الأسود",
+      "black"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "4",
+    "color_key": "pink",
+    "arabic_name": "وردي",
+    "english_name": "Pink",
+    "image_url": "https://files.easy-orders.net/1744720320703143217.jpg",
+    "keywords": [
+      "جملي",
+      "وردي",
+      "الوردي",
+      "pink"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "5",
+    "color_key": "blue",
+    "arabic_name": "أزرق",
+    "english_name": "Blue",
+    "image_url": "https://files.easy-orders.net/1723117554054321721.jpg",
+    "keywords": [
+      "ازرق",
+      "أزرق",
+      "الازرق",
+      "الأزرق",
+      "blue",
+      "كحلي",
+      "الكحلي",
+      "لون ازرق",
+      "اللون الازرق",
+      "اللون الأزرق"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "6",
+    "color_key": "purple",
+    "arabic_name": "بنفسجي",
+    "english_name": "Purple",
+    "image_url": "https://files.easy-orders.net/1744720320703143217.jpg",
+    "keywords": [
+      "بنفسجي",
+      "البنفسجي",
+      "موف",
+      "purple",
+      "بنفسج"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "7",
+    "color_key": "beige",
+    "arabic_name": "بيج",
+    "english_name": "Beige",
+    "image_url": "https://files.easy-orders.net/1739181695020677812.jpg",
+    "keywords": [
+      "بيج",
+      "البيج",
+      "beige"
+    ],
+    "is_active": true
+  },
+  {
+    "id": "8",
+    "color_key": "camel",
+    "arabic_name": "جملي",
+    "english_name": "Camel",
+    "image_url": "https://files.easy-orders.net/1739181874715440699.jpg",
+    "keywords": [
+      "جملي",
+      "الجملي",
+      "camel"
+    ],
+    "is_active": true
+  }
+]

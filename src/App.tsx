@@ -11,16 +11,26 @@ import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
 import Conversations from "./pages/Conversations";
 import Orders from "./pages/Orders";
-import ProductImages from "./pages/ProductImages";
 import Products from "./pages/Products";
 import ProductsVariants from "./pages/ProductsVariants";
+import ProductsVariantsFull from "./pages/ProductsVariantsFull";
+import TestPage from "./pages/TestPage";
 import Categories from "./pages/Categories";
-// import FacebookPageManagement from "./pages/FacebookPageManagement";
 import NotFound from "./pages/NotFound";
 import { NameUpdateService } from "./services/nameUpdateService";
 import { initializeDatabase } from "./utils/setupDatabase";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5000, // البيانات تبقى fresh لمدة 5 ثواني
+      gcTime: 30000, // الاحتفاظ بالـ cache لمدة 30 ثانية
+      refetchOnWindowFocus: false, // لا تعيد التحميل عند التركيز على النافذة
+      refetchOnMount: false, // لا تعيد التحميل عند mount إذا كانت البيانات fresh
+      retry: 2, // إعادة المحاولة مرتين فقط
+    },
+  },
+});
 
 const App = () => {
   useEffect(() => {
@@ -49,12 +59,12 @@ const App = () => {
             <Route path="/conversations" element={<Conversations />} />
             <Route path="/orders" element={<Orders />} />
             <Route path="/products" element={<Products />} />
-            <Route path="/products-variants" element={<ProductsVariants />} />
+            <Route path="/products-variants" element={<TestPage />} />
+            <Route path="/products-variants-full" element={<ProductsVariantsFull />} />
+            <Route path="/test-page" element={<TestPage />} />
             <Route path="/categories" element={<Categories />} />
-            <Route path="/product-images" element={<ProductImages />} />
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/settings" element={<Settings />} />
-            {/* <Route path="/facebook-management" element={<FacebookPageManagement />} /> */}
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
