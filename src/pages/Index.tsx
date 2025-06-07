@@ -1,8 +1,8 @@
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MessageSquare, Users, Clock, TrendingUp, Plus, Settings, Eye } from "lucide-react";
+import { MessageSquare, Users, Clock, TrendingUp, Plus, Settings, Eye, RefreshCw } from "lucide-react";
 import { Link } from "react-router-dom";
 import Navigation from "@/components/Navigation";
 import StatsCard from "@/components/StatsCard";
@@ -10,49 +10,121 @@ import RecentMessages from "@/components/RecentMessages";
 import QuickActions from "@/components/QuickActions";
 
 const Index = () => {
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // بيانات افتراضية في حالة فشل التحميل
+  const defaultStats = {
+    totalMessages: 1234,
+    autoReplies: 856,
+    activeConversations: 42,
+    responseRate: "98%"
+  };
+
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const fetchStats = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('http://localhost:3005/api/dashboard-stats');
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      setStats(data);
+      setError(null);
+    } catch (err) {
+      console.error('Error fetching dashboard stats:', err);
+      setError(err.message);
+      setStats(defaultStats); // استخدام البيانات الافتراضية
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // استخدام البيانات الحقيقية أو الافتراضية
+  const currentStats = stats || defaultStats;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100" dir="rtl">
       <Navigation />
-      
+
       <div className="container mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            لوحة التحكم
-          </h1>
-          <p className="text-gray-600">
-            إدارة الردود الآلية على رسائل الفيسبوك
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900 mb-2">
+                لوحة التحكم
+              </h1>
+              <p className="text-gray-600">
+                إدارة الردود الآلية على رسائل الفيسبوك
+              </p>
+            </div>
+            <Button
+              onClick={fetchStats}
+              variant="outline"
+              size="sm"
+              disabled={loading}
+              className="flex items-center gap-2"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              تحديث البيانات
+            </Button>
+          </div>
+
+          {loading && (
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-blue-700">🔄 جاري تحميل البيانات الحقيقية...</p>
+            </div>
+          )}
+
+          {error && (
+            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-yellow-700">⚠️ تعذر تحميل البيانات الحقيقية، يتم عرض بيانات تجريبية</p>
+            </div>
+          )}
+
+          {stats && !loading && (
+            <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+              <p className="text-green-700">✅ تم تحميل البيانات الحقيقية - آخر تحديث: {new Date(stats.lastUpdated).toLocaleString('ar-EG')}</p>
+            </div>
+          )}
         </div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           <StatsCard
             title="إجمالي الرسائل"
-            value="1,234"
+            value={currentStats.totalMessages?.toLocaleString() || "0"}
             icon={MessageSquare}
-            change="+12%"
+            change={stats ? "حقيقي" : "تجريبي"}
             color="blue"
           />
           <StatsCard
             title="الردود الآلية"
-            value="856"
+            value={currentStats.autoReplies?.toLocaleString() || "0"}
             icon={Clock}
-            change="+8%"
+            change={stats ? "حقيقي" : "تجريبي"}
             color="green"
           />
           <StatsCard
             title="المحادثات النشطة"
-            value="42"
+            value={currentStats.activeConversations?.toLocaleString() || "0"}
             icon={Users}
-            change="+5%"
+            change={stats ? "آخر 24 ساعة" : "تجريبي"}
             color="purple"
           />
           <StatsCard
             title="معدل الاستجابة"
-            value="98%"
+            value={currentStats.responseRate || "0%"}
             icon={TrendingUp}
-            change="+2%"
+            change={stats ? "محسوب" : "تجريبي"}
             color="orange"
           />
         </div>
