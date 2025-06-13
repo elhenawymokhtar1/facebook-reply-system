@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useFacebookApi } from "@/hooks/useFacebookApi";
 import { GeminiSettings } from "@/components/GeminiSettings";
 
+
 const Settings = () => {
   const { toast } = useToast();
   const [tempAccessToken, setTempAccessToken] = useState("EAAUpPO0SIEABO9ihG4UZBS1qLGUzMDGxcZAJP0SZAm9jYfLv6O6SmTQNmEYaXRW6rH8zMT6Iiu57wJRUZC9ipGlCF5y0bBFeJvU45DqfZAiqCuplQC00G92hcOAZChINt6TJQxuAehClhABkR9wvkgENRnmecUMqw5wrYCQZCB48zD32U7reTZC3cl5imCaSkHsKXq0aZBj5auHkZCZAJcoY0gNnqd7");
@@ -905,6 +906,8 @@ const Settings = () => {
               </div>
             </CardContent>
           </Card>
+
+
 
           {/* Webhook Diagnostics */}
           <Card className="lg:col-span-3">

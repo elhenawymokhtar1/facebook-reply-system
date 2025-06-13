@@ -9,10 +9,8 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "preview": "vite preview",
-    "webhook": "node webhook-server.js",
     "api": "tsx src/api/server.ts",
-    "image-server": "tsx src/api/image-server.ts",
-    "start:all": "concurrently \"npm run dev\" \"npm run webhook\" \"npm run api\"",
+    "start:all": "concurrently \"npm run dev\" \"npm run api\"",
     "test:webhook": "node test-webhook-diagnostics.js",
     "diagnose": "node test-webhook-diagnostics.js"
   },

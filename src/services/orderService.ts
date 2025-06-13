@@ -129,20 +129,6 @@ export class OrderService {
       }
     }
 
-    // استخراج اللون (أنماط متعددة)
-    const colors = ['أبيض', 'ابيض', 'أسود', 'اسود', 'أحمر', 'احمر', 'أزرق', 'ازرق', 'أخضر', 'اخضر', 'أصفر', 'اصفر', 'بني', 'رمادي', 'وردي', 'بنفسجي'];
-    const colorMatch = colors.find(color => text.toLowerCase().includes(color.toLowerCase()));
-    if (colorMatch) {
-      // توحيد الألوان
-      if (colorMatch.includes('بيض')) info.color = 'أبيض';
-      else if (colorMatch.includes('سود')) info.color = 'أسود';
-      else if (colorMatch.includes('حمر')) info.color = 'أحمر';
-      else if (colorMatch.includes('زرق')) info.color = 'أزرق';
-      else if (colorMatch.includes('خضر')) info.color = 'أخضر';
-      else if (colorMatch.includes('صفر')) info.color = 'أصفر';
-      else info.color = colorMatch;
-    }
-
     return info;
   }
 

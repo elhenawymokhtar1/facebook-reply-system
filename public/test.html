@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار بسيط</title>
+    <style>
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-align: center;
+            padding: 2rem;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <div>
+        <h1>🧪 اختبار JavaScript</h1>
+        <p>إذا رأيت هذه الرسالة، فإن HTML يعمل</p>
+        <button onclick="testJS()">اختبار JavaScript</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        console.log('🧪 JavaScript يعمل!');
+        
+        function testJS() {
+            document.getElementById('result').innerHTML = '<p style="color: #4CAF50;">✅ JavaScript يعمل بنجاح!</p>';
+            console.log('✅ تم النقر على الزر');
+        }
+        
+        // اختبار تلقائي
+        setTimeout(() => {
+            console.log('⏰ اختبار تلقائي بعد ثانيتين');
+            document.getElementById('result').innerHTML = '<p style="color: #FFC107;">⏰ JavaScript يعمل تلقائياً</p>';
+        }, 2000);
+    </script>
+</body>
+</html>

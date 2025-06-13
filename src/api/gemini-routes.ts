@@ -1,7 +1,8 @@
 import express from 'express';
 import { createClient } from '@supabase/supabase-js';
-import { GeminiAiServiceSimplified } from '../services/geminiAiSimplified';
-import { GeminiMessageProcessor } from '../services/geminiMessageProcessor';
+// import { GeminiAiServiceSimplified } from '../services/geminiAiSimplified'; // تم حذفه
+// import { GeminiMessageProcessor } from '../services/geminiMessageProcessor'; // تم حذفه
+import { SimpleGeminiService } from '../services/simpleGeminiService';
 
 const router = express.Router();
 
@@ -34,8 +35,8 @@ router.post('/process', async (req, res) => {
     // إنشاء conversation ID مؤقت
     const conversationId = `temp_${senderId}_${Date.now()}`;
 
-    console.log('🚀 Processing message with enhanced processor...');
-    const success = await GeminiMessageProcessor.processIncomingMessage(
+    console.log('🚀 Processing message with simple processor...');
+    const success = await SimpleGeminiService.processMessage(
       messageText,
       conversationId,
       senderId
@@ -60,7 +61,18 @@ router.get('/settings', async (req, res) => {
   try {
     console.log('🤖 Fetching Gemini settings...');
 
-    const settings = await GeminiAiServiceSimplified.getGeminiSettings();
+    // جلب الإعدادات مباشرة من قاعدة البيانات
+    const { data: settings, error } = await supabase
+      .from('gemini_settings')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('❌ Database error:', error);
+      return res.status(500).json({ error: 'Database error' });
+    }
 
     if (!settings) {
       console.log('⚠️ No Gemini settings found, returning defaults');
@@ -93,14 +105,23 @@ router.post('/settings', async (req, res) => {
     console.log('🤖 Saving Gemini settings...');
     const settings = req.body;
 
-    // استخدام الخدمة المبسطة لحفظ الإعدادات
-    await GeminiAiServiceSimplified.saveGeminiSettings(settings);
+    // حفظ الإعدادات مباشرة في قاعدة البيانات
+    const { data: savedSettings, error } = await supabase
+      .from('gemini_settings')
+      .upsert({
+        ...settings,
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single();
 
-    // جلب الإعدادات المحدثة
-    const updatedSettings = await GeminiAiServiceSimplified.getGeminiSettings();
+    if (error) {
+      console.error('❌ Database error:', error);
+      return res.status(500).json({ error: 'Database error' });
+    }
 
     console.log('✅ Gemini settings saved successfully');
-    res.json(updatedSettings);
+    res.json(savedSettings);
   } catch (error) {
     console.error('❌ Error in POST /api/gemini/settings:', error);
     res.status(500).json({ error: 'Failed to save Gemini settings' });
@@ -116,13 +137,28 @@ router.post('/test', async (req, res) => {
       return res.status(400).json({ error: 'API key is required' });
     }
 
-    // استخدام الخدمة المبسطة للاختبار
-    const result = await GeminiAiServiceSimplified.testConnection(api_key);
+    // اختبار الاتصال مباشرة مع Gemini API
+    const testResponse = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${api_key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: 'مرحبا، هذا اختبار للاتصال' }] }]
+        })
+      }
+    );
 
-    if (result.success) {
-      res.json(result);
+    if (testResponse.ok) {
+      res.json({
+        success: true,
+        message: 'تم الاتصال بـ Gemini AI بنجاح'
+      });
     } else {
-      res.status(400).json(result);
+      res.status(400).json({
+        success: false,
+        error: 'فشل في الاتصال بـ Gemini API'
+      });
     }
   } catch (error) {
     console.error('❌ Error in POST /api/gemini/test:', error);

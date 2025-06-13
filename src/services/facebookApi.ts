@@ -167,18 +167,17 @@ export class FacebookApiService {
         tokenPrefix: pageAccessToken ? pageAccessToken.substring(0, 10) + '...' : 'null'
       });
 
-      // استخدام API Server الخاص بنا بدلاً من الاتصال المباشر بـ Facebook API لتجنب مشاكل CORS
+      // استخدام Facebook Graph API مباشرة
       const response = await fetch(
-        `/api/facebook/send-message`,
+        `https://graph.facebook.com/v21.0/me/messages?access_token=${pageAccessToken}`,
         {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            access_token: pageAccessToken,
-            recipient_id: recipientId,
-            message: message
+            recipient: { id: recipientId },
+            message: { text: message }
           }),
         }
       );
@@ -210,96 +209,90 @@ export class FacebookApiService {
     }
   }
 
-  // إرسال صورة إلى مستخدم
-  async sendImage(pageAccessToken: string, recipientId: string, imageUrl: string): Promise<any> {
+  // 🎯 خدمة إرسال الصور المبسطة - طريقة واحدة فقط
+  async sendImage(pageAccessToken: string, recipientId: string, imageUrl: string, productInfo?: {
+    name?: string;
+    color?: string;
+    price?: number;
+    description?: string;
+  }): Promise<any> {
     try {
-      console.log('🔄 Attempting to send image via API Server:', imageUrl);
+      console.log('🖼️ [SIMPLE IMAGE SERVICE] Sending image:', {
+        imageUrl: imageUrl.substring(0, 50) + '...',
+        recipientId,
+        hasProductInfo: !!productInfo
+      });
 
-      // استخدام API Server الخاص بنا بدلاً من الاتصال المباشر بـ Facebook API لتجنب مشاكل CORS
-      try {
-        const response = await fetch(
-          `/api/facebook/send-image`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              access_token: pageAccessToken,
-              recipient_id: recipientId,
-              image_url: imageUrl
-            }),
-          }
-        );
-
-        const responseText = await response.text();
-        console.log('📤 API Server response:', response.status, responseText);
-
-        if (response.ok) {
-          const data = JSON.parse(responseText);
-          if (!data.error) {
-            console.log('✅ Image sent successfully via API Server');
-            return data;
-          }
-        }
-
-        // إذا فشل إرسال الصورة كـ URL، جرب تحميل الصورة وإرسالها كـ file
-        console.log('⚠️ URL attachment failed, trying file upload...');
-        throw new Error('URL attachment failed');
-
-      } catch (urlError) {
-        console.log('🔄 Attempting to download and upload image as file...');
-
-        // تحميل الصورة
-        const imageResponse = await fetch(imageUrl);
-        if (!imageResponse.ok) {
-          throw new Error(`Failed to download image: ${imageResponse.status}`);
-        }
-
-        const imageBuffer = await imageResponse.arrayBuffer();
-        const imageBlob = new Blob([imageBuffer], { type: 'image/jpeg' });
-
-        // إنشاء FormData لرفع الصورة
-        const formData = new FormData();
-        formData.append('recipient', JSON.stringify({ id: recipientId }));
-        formData.append('message', JSON.stringify({
-          attachment: {
-            type: 'image',
-            payload: {
-              is_reusable: false
+      // إرسال الصورة مباشرة عبر URL
+      const response = await fetch(
+        `https://graph.facebook.com/v21.0/me/messages?access_token=${pageAccessToken}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            recipient: { id: recipientId },
+            message: {
+              attachment: {
+                type: 'image',
+                payload: {
+                  url: imageUrl,
+                  is_reusable: true
+                }
+              }
             }
-          }
-        }));
-        formData.append('filedata', imageBlob, 'image.jpg');
-
-        // إرسال الصورة كـ file upload
-        const uploadResponse = await fetch(
-          `https://graph.facebook.com/v21.0/me/messages?access_token=${pageAccessToken}`,
-          {
-            method: 'POST',
-            body: formData,
-          }
-        );
-
-        const uploadResponseText = await uploadResponse.text();
-        console.log('📤 Facebook file upload response:', uploadResponse.status, uploadResponseText);
-
-        if (!uploadResponse.ok) {
-          throw new Error(`Facebook file upload Error: ${uploadResponse.status} - ${uploadResponseText}`);
+          })
         }
+      );
 
-        const uploadData = JSON.parse(uploadResponseText);
+      if (!response.ok) {
+        throw new Error(`Facebook API Error: ${response.status}`);
+      }
 
-        if (uploadData.error) {
-          throw new Error(uploadData.error.message);
-        }
+      const data = await response.json();
 
-        console.log('✅ Image sent successfully as file upload');
-        return uploadData;
+      if (data.error) {
+        throw new Error(data.error.message);
+      }
+
+      console.log('✅ [SIMPLE IMAGE SERVICE] Image sent successfully');
+
+      // إرسال معلومات المنتج كرسالة نصية إضافية إذا توفرت
+      if (productInfo && (productInfo.name || productInfo.color || productInfo.price)) {
+        await this.sendProductInfo(pageAccessToken, recipientId, productInfo);
+      }
+
+      return data;
+
+    } catch (error) {
+      console.error('❌ [SIMPLE IMAGE SERVICE] Failed to send image:', error);
+      throw error;
+    }
+  }
+
+  // إرسال معلومات المنتج كرسالة نصية
+  private async sendProductInfo(pageAccessToken: string, recipientId: string, productInfo: {
+    name?: string;
+    color?: string;
+    price?: number;
+    description?: string;
+  }): Promise<void> {
+    try {
+      let infoMessage = '';
+
+      if (productInfo.name) infoMessage += `📦 المنتج: ${productInfo.name}\n`;
+      if (productInfo.color) infoMessage += `🎨 اللون: ${productInfo.color}\n`;
+      if (productInfo.price) infoMessage += `💰 السعر: ${productInfo.price} جنيه\n`;
+      if (productInfo.description) infoMessage += `📝 الوصف: ${productInfo.description}\n`;
+
+      if (infoMessage) {
+        infoMessage += '\n💬 عايزة تعرفي تفاصيل أكتر؟ قوليلي! 😊';
+        await this.sendMessage(pageAccessToken, recipientId, infoMessage);
+        console.log('✅ Product info sent successfully');
       }
     } catch (error) {
-      console.error('❌ Error sending image:', error);
-      throw error;
+      console.log('⚠️ Failed to send product info:', error);
     }
   }
 

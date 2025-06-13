@@ -71,32 +71,7 @@ export const useMessages = (conversationId: string | null) => {
       let finalContent = content;
       let imageUrl = null;
 
-      // رفع الصورة إذا كانت موجودة
-      if (imageFile) {
-        frontendLogger.info(`Starting image upload`, { requestId, fileName: imageFile.name }, 'IMAGE_UPLOAD');
-
-        const fileExt = imageFile.name.split('.').pop();
-        const fileName = `${Date.now()}.${fileExt}`;
-        const filePath = `chat-images/${fileName}`;
-
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('chat-images')
-          .upload(filePath, imageFile);
-
-        if (uploadError) {
-          frontendLogger.error(`Image upload failed`, { requestId, error: uploadError }, 'IMAGE_UPLOAD');
-          throw uploadError;
-        }
-
-        // الحصول على الرابط العام للصورة
-        const { data: urlData } = supabase.storage
-          .from('chat-images')
-          .getPublicUrl(filePath);
-
-        imageUrl = urlData.publicUrl;
-        finalContent = content;
-        frontendLogger.info(`Image uploaded successfully`, { requestId, imageUrl }, 'IMAGE_UPLOAD');
-      }
+      // تم حذف نظام رفع الصور - النظام مبسط الآن
 
       // الحصول على معلومات المحادثة
       console.log(`🔍 [${requestId}] جلب معلومات المحادثة...`);

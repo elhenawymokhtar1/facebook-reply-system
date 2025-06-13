@@ -65,12 +65,11 @@ interface GeminiSettings {
 - المقاس
 - اللون
 
-### 4. 🖼️ Product Image Service (`productImageService.ts`)
+### 4. 🤖 Simple Gemini Service (مبسط)
 **الوظائف الرئيسية:**
-- `isImageRequest()` - فحص طلبات الصور
-- `detectColorInText()` - استخراج اللون من النص
-- `getProductImageByColor()` - جلب صورة المنتج
-- `createImageMessage()` - إنشاء رسالة الصورة
+- `processMessage()` - معالجة الرسائل بـ AI
+- `getProductInfo()` - جلب معلومات المنتجات
+- تم حذف أنظمة الصور والألوان المعقدة
 
 ## 🔧 إعداد النظام
 
@@ -88,7 +87,7 @@ GEMINI_API_KEY=your_gemini_api_key
 - `orders` - الطلبات
 - `auto_replies` - الردود التلقائية
 - `facebook_settings` - إعدادات Facebook
-- `product_images` - صور المنتجات
+- تم حذف جداول الصور والألوان - النظام مبسط
 
 ### 3. Facebook Webhook
 **URL:** `https://fbautoar.vercel.app/api/process-message`

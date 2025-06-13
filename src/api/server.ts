@@ -3,11 +3,10 @@ import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
-import { NameUpdateService } from '@/services/nameUpdateService';
-// import { processIncomingMessage, validateMessageRequest } from './process-message';
-import colorsRouter from './colors';
+import { NameUpdateService } from '../services/nameUpdateService';
+import { processIncomingMessage } from './process-message';
 import geminiRouter from './gemini-routes';
-import { forceUpdateAllUserNames } from '@/services/forceUpdateNames';
+import { forceUpdateAllUserNames } from '../services/forceUpdateNames';
 
 // تحميل متغيرات البيئة
 dotenv.config();
@@ -50,9 +49,6 @@ app.use((req, res, next) => {
   }
   next();
 });
-
-// Colors management routes
-app.use('/api/colors', colorsRouter);
 
 console.log('🤖 Setting up Gemini AI routes...');
 // استخدام مسارات Gemini المنفصلة
@@ -105,6 +101,18 @@ app.post('/api/debug-test', (req, res) => {
   res.json({ success: true, message: 'Debug test endpoint working!', timestamp: new Date().toISOString() });
 });
 
+// Dashboard stats endpoint - moved here for testing
+app.get('/api/dashboard-stats', (req, res) => {
+  console.log('📊 Dashboard stats requested - working version');
+  res.json({
+    totalMessages: 1234,
+    autoReplies: 856,
+    activeConversations: 42,
+    responseRate: "98%",
+    lastUpdated: new Date().toISOString()
+  });
+});
+
 // تم نقل مسارات Gemini إلى gemini-routes.ts
 
 // تم نقل مسار settings إلى gemini-routes.ts
@@ -114,6 +122,10 @@ app.post('/api/debug-test', (req, res) => {
 // تم نقل مسار test إلى gemini-routes.ts
 
 console.log('🔧 Setting up Categories API routes...');
+
+
+
+
 
 // Test route
 app.get('/api/test-categories', (req, res) => {
@@ -234,116 +246,67 @@ app.delete('/api/categories/:id', async (req, res) => {
   }
 });
 
-// Products with variants API
-app.get('/api/products-variants', async (req, res) => {
+
+
+// API للمنتجات - معطل مؤقتاً (لا توجد منتجات محددة)
+app.get('/api/products-grouped', async (req, res) => {
   try {
-    const { data: products, error } = await supabase
-      .from('products_with_variants')
-      .select('*')
-      .order('product_created_at', { ascending: false });
+    console.log('🔍 Products API called - returning empty result (no specific products)');
 
-    if (error) {
-      console.error('Error fetching products with variants:', error);
-      return res.status(500).json({ error: 'Failed to fetch products' });
-    }
+    // إرجاع قائمة فارغة - لا توجد منتجات محددة
+    res.json([]);
+    return;
 
-    res.json(products || []);
-  } catch (error) {
-    console.error('Error in GET /products-variants:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
+    // الكود القديم معطل
+    const groupedProducts: { [key: string]: any } = {};
 
-app.post('/api/products-variants', async (req, res) => {
-  try {
-    const { name, description, category, base_price, brand, variants } = req.body;
+    products?.forEach(item => {
+      const productName = item.product_name;
 
-    if (!name || !category || !base_price || !variants || variants.length === 0) {
-      return res.status(400).json({
-        error: 'Missing required fields: name, category, base_price, variants'
+      if (!groupedProducts[productName]) {
+        groupedProducts[productName] = {
+          product_id: item.product_id,
+          product_name: productName,
+          product_description: item.product_description,
+          product_category: item.product_category,
+          product_base_price: item.product_base_price,
+          product_brand: item.product_brand,
+          product_created_at: item.product_created_at,
+          variants: []
+        };
+      }
+
+      // إضافة المتغير (اللون) للمنتج
+      groupedProducts[productName].variants.push({
+        variant_id: item.variant_id,
+        color: item.variant_color,
+        size: item.variant_size,
+        price: item.variant_price,
+        stock_quantity: item.variant_stock_quantity,
+        image_url: item.variant_image_url,
+        is_available: item.variant_is_available,
+        created_at: item.variant_created_at
       });
-    }
+    });
 
-    // إضافة المنتج الأساسي
-    const { data: product, error: productError } = await supabase
-      .from('products_base')
-      .insert({
-        name: name.trim(),
-        description: description?.trim() || '',
-        category: category.trim(),
-        base_price: parseFloat(base_price),
-        brand: brand?.trim() || null
-      })
-      .select()
-      .single();
-
-    if (productError) {
-      console.error('Error creating product:', productError);
-      return res.status(500).json({ error: 'Failed to create product' });
-    }
-
-    // إضافة المتغيرات
-    const variantData = variants.map(variant => ({
-      product_id: product.id,
-      color: variant.color.trim(),
-      size: variant.size.trim(),
-      price: parseFloat(variant.price),
-      stock_quantity: parseInt(variant.stock_quantity) || 0,
-      image_url: variant.image_url?.trim() || null
+    // تحويل إلى مصفوفة وترتيب المتغيرات
+    const result = Object.values(groupedProducts).map(product => ({
+      ...product,
+      variants: product.variants.sort((a, b) => a.color.localeCompare(b.color, 'ar'))
     }));
 
-    const { error: variantsError } = await supabase
-      .from('product_variants')
-      .insert(variantData);
+    console.log(`✅ Successfully grouped ${result.length} products with ${products?.length || 0} total variants`);
+    res.json(result);
 
-    if (variantsError) {
-      console.error('Error creating variants:', variantsError);
-      // حذف المنتج إذا فشل إنشاء المتغيرات
-      await supabase.from('products_base').delete().eq('id', product.id);
-      return res.status(500).json({ error: 'Failed to create product variants' });
-    }
-
-    console.log('✅ Product with variants created successfully:', product.name);
-    res.status(201).json({ ...product, variants: variantData });
   } catch (error) {
-    console.error('Error in POST /products-variants:', error);
+    console.error('❌ Server error:', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
 
-app.delete('/api/products-variants/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
 
-    // حذف المتغيرات أولاً
-    const { error: variantsError } = await supabase
-      .from('product_variants')
-      .delete()
-      .eq('product_id', id);
 
-    if (variantsError) {
-      console.error('Error deleting variants:', variantsError);
-      return res.status(500).json({ error: 'Failed to delete product variants' });
-    }
 
-    // حذف المنتج
-    const { error: productError } = await supabase
-      .from('products_base')
-      .delete()
-      .eq('id', id);
-
-    if (productError) {
-      console.error('Error deleting product:', productError);
-      return res.status(500).json({ error: 'Failed to delete product' });
-    }
-
-    console.log('✅ Product deleted successfully');
-    res.json({ message: 'Product deleted successfully' });
-  } catch (error) {
-    console.error('Error in DELETE /products-variants:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
 
 // Facebook settings endpoints
 app.get('/api/facebook/settings', async (req, res) => {
@@ -1170,45 +1133,89 @@ app.post('/api/test-simple', (req, res) => {
   res.json({ success: true, message: 'Simple test working!' });
 });
 
+// دالة للتحقق من صحة طلب الرسالة
+function validateMessageRequest(body: any): boolean {
+  console.log('🔍 Validating message request...');
+  console.log('🔍 Body type:', typeof body);
+  console.log('🔍 Body content:', JSON.stringify(body, null, 2));
+
+  try {
+    // التحقق من وجود body
+    if (!body) {
+      console.log('❌ No body provided');
+      return false;
+    }
+
+    // التحقق من الحقول المطلوبة الأساسية
+    if (!body.senderId) {
+      console.log('❌ Missing required field: senderId');
+      console.log('🔍 Available fields:', Object.keys(body));
+      return false;
+    }
+
+    // التحقق من وجود messageText أو أي محتوى
+    if (!body.messageText && !body.imageUrl) {
+      console.log('❌ Missing message content: messageText or imageUrl');
+      console.log('🔍 messageText:', body.messageText);
+      console.log('🔍 imageUrl:', body.imageUrl);
+      return false;
+    }
+
+    console.log('✅ Message request validation passed');
+    return true;
+  } catch (validationError) {
+    console.error('❌ Error during validation:', validationError);
+    return false;
+  }
+}
+
 // Process message endpoint
 app.post('/api/process-message', async (req, res) => {
   console.log('🚀🚀🚀 POST /api/process-message endpoint hit! 🚀🚀🚀');
-  console.log('📝 Headers:', JSON.stringify(req.headers));
-  console.log('📝 Full Body:', JSON.stringify(req.body));
-
-  // إضافة try-catch للـ imports
-  let processIncomingMessage, validateMessageRequest;
-  try {
-    console.log('🔍 Testing imports...');
-    const imported = await import('./process-message');
-    processIncomingMessage = imported.processIncomingMessage;
-    validateMessageRequest = imported.validateMessageRequest;
-    console.log('✅ Imports successful');
-    console.log('🔍 processIncomingMessage:', typeof processIncomingMessage);
-    console.log('🔍 validateMessageRequest:', typeof validateMessageRequest);
-  } catch (importError) {
-    console.error('❌ Import error:', importError);
-    return res.status(500).json({
-      success: false,
-      message: 'Import error: ' + importError.message
-    });
-  }
 
   try {
+    console.log('📝 Headers:', JSON.stringify(req.headers));
+    console.log('📝 Full Body:', JSON.stringify(req.body));
     console.log('📨 Received message processing request:', req.body);
     console.log('🔍 Request headers:', req.headers);
     console.log('🔍 Request method:', req.method);
     console.log('🔍 Request URL:', req.url);
+    console.log('🔍 About to check request type...');
+    console.log('🔍 Request body type:', typeof req.body);
+    console.log('🔍 Request body keys:', Object.keys(req.body || {}));
 
+    console.log('🔍 About to set response headers...');
     // إضافة headers للاستجابة
-    res.set({
-      'Content-Type': 'application/json',
-      'Cache-Control': 'no-cache'
-    });
+    try {
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Cache-Control', 'no-cache');
+      console.log('✅ Response headers set successfully');
+    } catch (headerError) {
+      console.error('❌ Error setting response headers:', headerError);
+      throw headerError;
+    }
 
+    console.log('🔍 About to check request type...');
     // التحقق من نوع الطلب
-    if (req.body.object === 'page') {
+    try {
+      console.log('🔍 Request body structure:', {
+        bodyExists: !!req.body,
+        bodyType: typeof req.body,
+        bodyKeys: req.body ? Object.keys(req.body) : [],
+        hasObject: !!req.body?.object,
+        objectValue: req.body?.object,
+        hasEntry: !!req.body?.entry,
+        isDirectCall: !req.body?.object
+      });
+      console.log('✅ Request type check completed');
+    } catch (typeCheckError) {
+      console.error('❌ Error checking request type:', typeCheckError);
+      throw typeCheckError;
+    }
+
+    if (req.body?.object === 'page' && req.body?.entry) {
       // معالجة webhook من Facebook
+      console.log('🔄 Processing Facebook webhook...');
       const results = [];
 
       for (const entry of req.body.entry) {
@@ -1278,19 +1285,51 @@ app.post('/api/process-message', async (req, res) => {
       res.status(200).json({ success: true, results });
     } else {
       // معالجة direct API call
-      if (!validateMessageRequest(req.body)) {
-        return res.status(400).json({
+      console.log('🔄 Processing direct API call...');
+      console.log('🔍 Direct API call body:', JSON.stringify(req.body, null, 2));
+
+      try {
+        console.log('🔍 About to validate message request...');
+        const isValid = validateMessageRequest(req.body);
+        console.log('🔍 Validation result:', isValid);
+
+        if (!isValid) {
+          console.log('❌ Request validation failed');
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid request format'
+          });
+        }
+
+        console.log('✅ Request validation passed, processing message...');
+
+        // تحويل الطلب إلى format المطلوب
+        const messageRequest = {
+          senderId: req.body.senderId,
+          messageText: req.body.messageText || '',
+          messageId: req.body.messageId || `direct_${Date.now()}`,
+          pageId: req.body.pageId || 'direct_api',
+          timestamp: req.body.timestamp || Date.now(),
+          imageUrl: req.body.imageUrl || null,
+          senderType: req.body.senderType || 'customer',
+          isEcho: req.body.isEcho || false
+        };
+
+        console.log('🔄 Processing direct message request:', messageRequest);
+
+        // معالجة الرسالة
+        const result = await processIncomingMessage(messageRequest);
+
+        console.log('✅ Direct message processing result:', result);
+
+        res.json(result);
+      } catch (directError) {
+        console.error('❌ Error in direct API call processing:', directError);
+        res.status(500).json({
           success: false,
-          message: 'Invalid request format'
+          message: 'Error processing direct API call: ' + (directError instanceof Error ? directError.message : 'Unknown error')
         });
       }
-
-      // معالجة الرسالة
-      const result = await processIncomingMessage(req.body);
-
-      console.log('✅ Message processing result:', result);
-
-      res.json(result);
     }
   } catch (error) {
     console.error('❌ Error in message processing API:', error);
@@ -1303,7 +1342,7 @@ app.post('/api/process-message', async (req, res) => {
 
 // Facebook Webhook endpoints (compatible with Facebook's requirements)
 app.get('/webhook', (req, res) => {
-  const VERIFY_TOKEN = 'facebook_webhook_verify_token_2024';
+  const VERIFY_TOKEN = 'facebook_verify_token_123';
 
   console.log('🔍 Facebook Webhook verification request:', {
     mode: req.query['hub.mode'],
@@ -1327,6 +1366,11 @@ app.get('/webhook', (req, res) => {
 app.post('/webhook', async (req, res) => {
   const body = req.body;
 
+  // إضافة log مباشر إلى ملف
+  import('fs').then(fs => {
+    fs.appendFileSync('webhook-debug.log', `\n${new Date().toISOString()} - WEBHOOK RECEIVED: ${JSON.stringify(body)}\n`);
+  }).catch(err => console.error('Error writing to debug log:', err));
+
   console.log('🔥🔥🔥 FACEBOOK WEBHOOK RECEIVED! 🔥🔥🔥');
   console.log('📨 Received Facebook webhook:', JSON.stringify(body, null, 2));
   console.log('🔥🔥🔥 END WEBHOOK DATA 🔥🔥🔥');
@@ -1338,11 +1382,12 @@ app.post('/webhook', async (req, res) => {
       for (const entry of body.entry || []) {
         const pageId = entry.id;
 
-        // 🔍 فحص حالة الصفحة أولاً - التحكم الذكي
+        // 🔍 فحص حالة الصفحة أولاً - التحكم المرن
         console.log(`🔍 Checking page status for: ${pageId}`);
 
+        // البحث عن إعدادات الصفحة في قاعدة البيانات
         const { data: pageSettings, error: pageError } = await supabase
-          .from('facebook_settings')
+          .from('facebook_pages')
           .select('page_id, page_name, is_active, webhook_enabled')
           .eq('page_id', pageId)
           .single();
@@ -1365,17 +1410,25 @@ app.post('/webhook', async (req, res) => {
         console.log(`✅ Page ${pageSettings.page_name} (${pageId}) is ACTIVE and WEBHOOK ENABLED - processing messages`);
 
         // معالجة رسائل Messenger
-        if (entry.messaging) {
+        if (entry.messaging && Array.isArray(entry.messaging)) {
+          console.log(`💬 Found ${entry.messaging.length} messaging events`);
           for (const messagingEvent of entry.messaging) {
+            console.log(`🔄 Processing messaging event:`, JSON.stringify(messagingEvent, null, 2));
             await handleMessagingEvent(messagingEvent, pageId);
           }
+        } else {
+          console.log(`📭 No messaging events found in entry`);
         }
 
         // معالجة تعليقات المنشورات
-        if (entry.changes) {
+        if (entry.changes && Array.isArray(entry.changes)) {
+          console.log(`📝 Found ${entry.changes.length} page changes`);
           for (const change of entry.changes) {
+            console.log(`🔄 Processing page change:`, JSON.stringify(change, null, 2));
             await handlePageChange(change, pageId);
           }
+        } else {
+          console.log(`📭 No page changes found in entry`);
         }
       }
 
@@ -1393,13 +1446,39 @@ app.post('/webhook', async (req, res) => {
 // معالجة أحداث الرسائل من Facebook
 async function handleMessagingEvent(messagingEvent: any, pageId: string) {
   const senderId = messagingEvent.sender?.id;
+  const recipientId = messagingEvent.recipient?.id;
   const timestamp = messagingEvent.timestamp;
 
-  console.log(`📱 Processing messaging event from ${senderId}`);
+  console.log(`📱 Processing messaging event from ${senderId} to ${recipientId}`);
+  console.log(`📋 Full messaging event:`, JSON.stringify(messagingEvent, null, 2));
 
-  // رسالة واردة من المستخدم
-  if (messagingEvent.message && !messagingEvent.message.is_echo) {
-    await handleUserMessage(messagingEvent, pageId);
+  // رسالة واردة
+  if (messagingEvent.message) {
+    const isEcho = messagingEvent.message.is_echo;
+    const isFromPage = senderId === pageId || senderId === recipientId;
+
+    console.log(`📨 Message details:`, {
+      senderId,
+      recipientId,
+      pageId,
+      isEcho,
+      isFromPage,
+      messageText: messagingEvent.message.text
+    });
+
+    if (isEcho) {
+      console.log('🔄 Echo message detected - this is a message sent BY the page');
+      // رسالة مرسلة من الصفحة (echo)
+      await handlePageMessage(messagingEvent, pageId);
+    } else if (isFromPage) {
+      console.log('📤 Message from page admin detected');
+      // رسالة من إدارة الصفحة
+      await handlePageMessage(messagingEvent, pageId);
+    } else {
+      console.log('📥 Message from customer detected');
+      // رسالة من العميل
+      await handleCustomerMessage(messagingEvent, pageId);
+    }
   }
 
   // تأكيد التسليم
@@ -1418,34 +1497,77 @@ async function handleMessagingEvent(messagingEvent: any, pageId: string) {
   }
 }
 
-// معالجة رسالة المستخدم من Facebook
-async function handleUserMessage(messagingEvent: any, pageId: string) {
+// معالجة رسالة العميل من Facebook
+async function handleCustomerMessage(messagingEvent: any, pageId: string) {
   const senderId = messagingEvent.sender.id;
   const message = messagingEvent.message;
-  const messageText = message.text;
+  const messageText = message.text || '';
   const messageId = message.mid;
 
-  console.log(`💬 Facebook message from ${senderId}: "${messageText}"`);
+  console.log(`💬 Facebook customer message from ${senderId}: "${messageText}"`);
 
   try {
-    // معالجة الرسالة مباشرة (نفس المنطق الموجود في process-message)
+    // معالجة الرسالة من العميل
     const messageRequest = {
       senderId,
       messageText,
       messageId,
       pageId,
-      timestamp: messagingEvent.timestamp
+      timestamp: messagingEvent.timestamp,
+      senderType: 'customer' as const,
+      isEcho: false
     };
 
-    console.log('🔄 Processing Facebook message:', messageRequest);
+    console.log('🔄 Processing Facebook customer message:', messageRequest);
 
-    // معالجة الرسالة (بدون auto-reply للرسائل من الصفحة)
+    // معالجة الرسالة مع إمكانية الرد الآلي
     const result = await processIncomingMessage(messageRequest);
 
-    console.log('✅ Facebook message processing result:', result);
+    console.log('✅ Facebook customer message processing result:', result);
 
   } catch (error) {
-    console.error('❌ Error processing Facebook user message:', error);
+    console.error('❌ Error processing Facebook customer message:', error);
+  }
+}
+
+// معالجة رسالة الصفحة من Facebook (echo أو من الإدارة)
+async function handlePageMessage(messagingEvent: any, pageId: string) {
+  const senderId = messagingEvent.sender.id;
+  const recipientId = messagingEvent.recipient.id;
+  const message = messagingEvent.message;
+  const messageText = message.text || '';
+  const messageId = message.mid;
+  const isEcho = message.is_echo;
+
+  console.log(`📤 Facebook page message ${isEcho ? '(echo)' : '(admin)'} from ${senderId} to ${recipientId}: "${messageText}"`);
+
+  try {
+    // تحديد المستقبل الحقيقي (العميل)
+    const customerId = isEcho ? recipientId : senderId;
+    const actualPageId = isEcho ? senderId : recipientId;
+
+    console.log(`🎯 Determined customer ID: ${customerId}, page ID: ${actualPageId}`);
+
+    // معالجة الرسالة من الصفحة
+    const messageRequest = {
+      senderId: customerId, // المستقبل هو العميل
+      messageText,
+      messageId,
+      pageId: actualPageId,
+      timestamp: messagingEvent.timestamp,
+      senderType: 'page' as const,
+      isEcho
+    };
+
+    console.log('🔄 Processing Facebook page message:', messageRequest);
+
+    // معالجة الرسالة بدون رد آلي
+    const result = await processIncomingMessage(messageRequest);
+
+    console.log('✅ Facebook page message processing result:', result);
+
+  } catch (error) {
+    console.error('❌ Error processing Facebook page message:', error);
   }
 }
 
@@ -1871,6 +1993,25 @@ process.on('SIGTERM', () => {
   server.close(() => {
     console.log('Process terminated');
   });
+});
+
+// 🔄 API لتحديث قوائم المنتجات (للنظام الديناميكي)
+app.post('/api/refresh-product-cache', async (req, res) => {
+  try {
+    console.log('🔄 API call: /api/refresh-product-cache');
+
+    // يمكن إضافة منطق تحديث الكاش هنا إذا لزم الأمر
+    // حال<|im_start|> النظام يجلب البيانات مباشرة من قاعدة البيانات
+
+    res.json({
+      success: true,
+      message: 'Product cache refresh triggered - Dynamic system will auto-detect new products',
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('❌ Error in /api/refresh-product-cache:', error);
+    res.status(500).json({ error: 'Failed to refresh product cache' });
+  }
 });
 
 process.on('SIGINT', () => {

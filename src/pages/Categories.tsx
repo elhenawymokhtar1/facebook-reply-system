@@ -72,20 +72,6 @@ const Categories = () => {
     { value: 'watch', label: '⌚ ساعات', name: 'watch' }
   ];
 
-  // خيارات الألوان
-  const colorOptions = [
-    { value: 'blue', label: 'أزرق', class: 'bg-blue-500' },
-    { value: 'green', label: 'أخضر', class: 'bg-green-500' },
-    { value: 'purple', label: 'بنفسجي', class: 'bg-purple-500' },
-    { value: 'red', label: 'أحمر', class: 'bg-red-500' },
-    { value: 'yellow', label: 'أصفر', class: 'bg-yellow-500' },
-    { value: 'pink', label: 'وردي', class: 'bg-pink-500' },
-    { value: 'gray', label: 'رمادي', class: 'bg-gray-500' },
-    { value: 'orange', label: 'برتقالي', class: 'bg-orange-500' },
-    { value: 'teal', label: 'تركوازي', class: 'bg-teal-500' },
-    { value: 'rose', label: 'وردي فاتح', class: 'bg-rose-500' }
-  ];
-
   const resetForm = () => {
     setFormData({
       name: '',

@@ -121,7 +121,9 @@ export const useGeminiChat = () => {
       conversationId: string;
       senderId: string;
     }) => {
-      return await GeminiMessageProcessor.processIncomingMessage(message, conversationId, senderId);
+      // استخدام النظام الجديد البسيط
+      const { SimpleGeminiService } = await import('@/services/simpleGeminiService');
+      return await SimpleGeminiService.processMessage(message, conversationId, senderId);
     },
     onSuccess: (success) => {
       if (success) {

@@ -10,8 +10,10 @@ import RecentMessages from "@/components/RecentMessages";
 import QuickActions from "@/components/QuickActions";
 
 const Index = () => {
+  console.log('📊 Index page is rendering...');
+
   const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   // بيانات افتراضية في حالة فشل التحميل
@@ -23,27 +25,32 @@ const Index = () => {
   };
 
   useEffect(() => {
+    console.log('📊 Index useEffect running...');
     fetchStats();
   }, []);
 
   const fetchStats = async () => {
+    console.log('📡 Fetching dashboard stats...');
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3005/api/dashboard-stats');
+      const response = await fetch('http://localhost:3002/api/dashboard-stats');
+      console.log('📡 Response status:', response.status);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
+      console.log('📊 Stats data received:', data);
       setStats(data);
       setError(null);
     } catch (err) {
-      console.error('Error fetching dashboard stats:', err);
+      console.error('❌ Error fetching dashboard stats:', err);
       setError(err.message);
       setStats(defaultStats); // استخدام البيانات الافتراضية
     } finally {
       setLoading(false);
+      console.log('✅ Stats loading completed');
     }
   };
 

@@ -6,7 +6,8 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { MessageSquare, Send, Bot, User, Loader2 } from "lucide-react";
-import { AutoReplyService } from "@/services/autoReplyService";
+// import { AutoReplyService } from "@/services/autoReplyService"; // تم حذفه
+import { SimpleGeminiService } from "@/services/simpleGeminiService";
 import { useToast } from "@/hooks/use-toast";
 
 interface TestMessage {
@@ -46,17 +47,17 @@ const AutoReplyTester = () => {
 
       setTestHistory(prev => [...prev, userMessage]);
 
-      // البحث عن رد مناسب
-      const matchingReply = await AutoReplyService.findMatchingReply(testMessage);
+      // البحث عن رد مناسب باستخدام النظام الجديد
+      const success = await SimpleGeminiService.processMessage(testMessage, 'test-conversation', 'test-sender');
 
-      if (matchingReply) {
+      if (success) {
         // إضافة رد البوت
         const botMessage: TestMessage = {
           id: (Date.now() + 1).toString(),
-          text: matchingReply.response_text,
+          text: "تم معالجة الرسالة بنجاح بواسطة النظام الذكي الجديد",
           sender: 'bot',
           timestamp: new Date(),
-          matchedKeyword: matchingReply.matchedKeyword
+          matchedKeyword: 'نظام ذكي'
         };
 
         setTimeout(() => {
@@ -64,14 +65,14 @@ const AutoReplyTester = () => {
         }, 1000); // محاكاة تأخير الرد
 
         toast({
-          title: "تم العثور على رد مناسب",
-          description: `تم مطابقة الكلمة المفتاحية: "${matchingReply.matchedKeyword}"`,
+          title: "تم المعالجة بنجاح",
+          description: "تم معالجة الرسالة بواسطة النظام الذكي الجديد",
         });
       } else {
         // لا يوجد رد مناسب
         const noReplyMessage: TestMessage = {
           id: (Date.now() + 1).toString(),
-          text: "عذراً، لم أتمكن من فهم رسالتك. يرجى التواصل مع خدمة العملاء.",
+          text: "فشل في معالجة الرسالة بواسطة النظام الجديد",
           sender: 'bot',
           timestamp: new Date()
         };

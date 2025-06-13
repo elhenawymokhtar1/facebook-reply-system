@@ -1,5 +1,5 @@
-// API endpoint لمعالجة الرسائل من Webhook Server
-import { AutoReplyService } from '../services/autoReplyService';
+// API endpoint لمعالجة الرسائل من Webhook Server - النظام البسيط الجديد
+import { SimpleGeminiService } from '../services/simpleGeminiService';
 import { createClient } from '@supabase/supabase-js';
 
 // إعداد Supabase
@@ -33,21 +33,19 @@ export async function processIncomingMessage(
 
   try {
     const messageTypeLabel = senderType === 'page' ? 'page admin' : 'customer';
-    console.log(`Processing message from ${messageTypeLabel} ${senderId}: "${messageText}"`);
+    console.log(`📨 Processing message from ${messageTypeLabel} ${senderId}: "${messageText}"`);
+    console.log(`📋 Message details:`, { senderId, messageId, pageId, senderType, isEcho, timestamp });
 
-    // الحصول على اسم المرسل من Facebook API
+    // الحصول على المحادثة (بسيط وموحد)
+    console.log('📥 Getting/creating conversation...');
     const senderName = await getSenderName(senderId, pageId) || `User ${senderId}`;
-
-    // إنشاء أو الحصول على المحادثة
-    const conversationId = await AutoReplyService.getOrCreateConversation(
-      senderId,
-      senderName,
-      pageId
-    );
+    const conversationId = await getOrCreateConversation(senderId, senderName, pageId);
 
     if (!conversationId) {
       throw new Error('Failed to create or get conversation');
     }
+
+    console.log(`💾 Saving message to conversation: ${conversationId}`);
 
     // حفظ الرسالة الواردة (تجاهل المكررة)
     try {
@@ -65,23 +63,25 @@ export async function processIncomingMessage(
       throw error;
     }
 
-    // معالجة الرد الآلي (فقط للرسائل من العملاء، ليس من الصفحة)
+    // معالجة الرد الآلي الذكي (فقط للرسائل من العملاء)
     let autoReplyWasSent = false;
     if (senderType === 'customer' && !isEcho) {
-      console.log('🚀 Starting auto reply processing...');
-      console.log('📝 Parameters:', { senderId, messageText, conversationId });
-      autoReplyWasSent = await AutoReplyService.processIncomingMessage(
-        senderId,
+      console.log('🚀 Starting smart auto reply processing...');
+      autoReplyWasSent = await SimpleGeminiService.processMessage(
         messageText,
-        conversationId
+        conversationId,
+        senderId,
+        pageId
       );
-      console.log('🤖 Auto reply result:', autoReplyWasSent);
+      console.log('🤖 Smart auto reply result:', autoReplyWasSent);
     } else {
       console.log('📤 Message from page admin - no auto reply needed');
     }
 
     // تحديث المحادثة
     await updateConversation(conversationId, messageText, senderType);
+
+    console.log(`✅ Message processed successfully for conversation: ${conversationId}`);
 
     return {
       success: true,
@@ -91,7 +91,7 @@ export async function processIncomingMessage(
     };
 
   } catch (error) {
-    console.error('Error processing incoming message:', error);
+    console.error('❌ Error processing incoming message:', error);
     return {
       success: false,
       message: error instanceof Error ? error.message : 'Unknown error occurred'
@@ -127,8 +127,7 @@ async function saveIncomingMessage(
         is_read: senderType === 'page', // رسائل الصفحة تعتبر مقروءة تلقائياً
         is_auto_reply: false,
         image_url: imageUrl || '',
-        created_at: timestamp ? new Date(timestamp).toISOString() : new Date().toISOString(),
-        page_id: pageId || '' // إضافة حقل page_id المطلوب
+        created_at: timestamp ? new Date(timestamp).toISOString() : new Date().toISOString()
       });
 
     if (error) {
@@ -247,6 +246,55 @@ async function updateUserNameInDatabase(customerFacebookId: string, realName: st
     }
   } catch (error) {
     console.error('Error updating user name in database:', error);
+  }
+}
+
+// إنشاء محادثة جديدة إذا لم تكن موجودة (بسيط)
+async function getOrCreateConversation(
+  customerFacebookId: string,
+  customerName: string,
+  pageId: string
+): Promise<string | null> {
+  try {
+    // البحث عن محادثة موجودة
+    const { data: existingConversation, error: searchError } = await supabase
+      .from('conversations')
+      .select('id, customer_name')
+      .eq('customer_facebook_id', customerFacebookId)
+      .maybeSingle();
+
+    if (searchError && searchError.code !== 'PGRST116') {
+      console.error('Error searching for conversation:', searchError);
+      return null;
+    }
+
+    if (existingConversation) {
+      return existingConversation.id;
+    }
+
+    // إنشاء محادثة جديدة
+    const { data: newConversation, error: createError } = await supabase
+      .from('conversations')
+      .insert({
+        facebook_page_id: pageId,
+        customer_facebook_id: customerFacebookId,
+        customer_name: customerName,
+        last_message_at: new Date().toISOString(),
+        is_online: true,
+        unread_count: 0
+      })
+      .select('id')
+      .single();
+
+    if (createError) {
+      console.error('Error creating conversation:', createError);
+      return null;
+    }
+
+    return newConversation.id;
+  } catch (error) {
+    console.error('Error in getOrCreateConversation:', error);
+    return null;
   }
 }
 

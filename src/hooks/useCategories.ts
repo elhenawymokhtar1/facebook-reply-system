@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import { mockAPI } from '@/data/mockData';
 
 // أنواع البيانات
 interface Category {
@@ -39,14 +38,26 @@ export const useCategories = () => {
   // جلب جميع الفئات مع الإحصائيات
   const { data: categories = [], isLoading, error } = useQuery({
     queryKey: ['categories'],
-    queryFn: mockAPI.getCategories,
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE}/categories`);
+      if (!response.ok) throw new Error('Failed to fetch categories');
+      return response.json();
+    },
     staleTime: 30000,
     cacheTime: 300000,
   });
 
   // إضافة فئة جديدة
   const addCategory = useMutation({
-    mutationFn: mockAPI.createCategory,
+    mutationFn: async (categoryData: CreateCategoryData) => {
+      const response = await fetch(`${API_BASE}/categories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(categoryData),
+      });
+      if (!response.ok) throw new Error('Failed to create category');
+      return response.json();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories'] });
       queryClient.invalidateQueries({ queryKey: ['categories', 'active'] });
@@ -88,7 +99,13 @@ export const useCategories = () => {
 
   // حذف فئة
   const deleteCategory = useMutation({
-    mutationFn: mockAPI.deleteCategory,
+    mutationFn: async (categoryId: string) => {
+      const response = await fetch(`${API_BASE}/categories/${categoryId}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) throw new Error('Failed to delete category');
+      return response.json();
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories'] });
       queryClient.invalidateQueries({ queryKey: ['categories', 'active'] });
@@ -165,7 +182,11 @@ export const useCategories = () => {
 export const useActiveCategories = () => {
   return useQuery({
     queryKey: ['categories', 'active'],
-    queryFn: mockAPI.getActiveCategories,
+    queryFn: async () => {
+      const response = await fetch(`${API_BASE}/categories/active`);
+      if (!response.ok) throw new Error('Failed to fetch active categories');
+      return response.json();
+    },
     staleTime: 60000,
     cacheTime: 300000,
   });
@@ -233,22 +254,32 @@ export const getCategoryIcon = (iconName: string) => {
   return iconMap[iconName] || '📦';
 };
 
+// دالة للحصول على لون الفئة
 export const getCategoryColor = (colorName: string) => {
   const colorMap: Record<string, string> = {
-    'blue': 'bg-blue-100 text-blue-800 border-blue-200',
-    'green': 'bg-green-100 text-green-800 border-green-200',
-    'purple': 'bg-purple-100 text-purple-800 border-purple-200',
-    'red': 'bg-red-100 text-red-800 border-red-200',
-    'yellow': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-    'pink': 'bg-pink-100 text-pink-800 border-pink-200',
-    'gray': 'bg-gray-100 text-gray-800 border-gray-200',
-    'indigo': 'bg-indigo-100 text-indigo-800 border-indigo-200',
-    'orange': 'bg-orange-100 text-orange-800 border-orange-200',
-    'teal': 'bg-teal-100 text-teal-800 border-teal-200',
-    'rose': 'bg-rose-100 text-rose-800 border-rose-200'
+    'blue': '#3B82F6',
+    'green': '#10B981',
+    'red': '#EF4444',
+    'yellow': '#F59E0B',
+    'purple': '#8B5CF6',
+    'pink': '#EC4899',
+    'indigo': '#6366F1',
+    'gray': '#6B7280',
+    'orange': '#F97316',
+    'teal': '#14B8A6',
+    'cyan': '#06B6D4',
+    'lime': '#84CC16',
+    'emerald': '#059669',
+    'rose': '#F43F5E',
+    'violet': '#7C3AED',
+    'amber': '#D97706',
+    'slate': '#475569',
+    'zinc': '#52525B',
+    'neutral': '#525252',
+    'stone': '#57534E'
   };
 
-  return colorMap[colorName] || 'bg-gray-100 text-gray-800 border-gray-200';
+  return colorMap[colorName] || '#6B7280';
 };
 
 // دالة للحصول على الفئات مرتبة حسب الاستخدام

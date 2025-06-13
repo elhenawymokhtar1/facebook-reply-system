@@ -64,7 +64,7 @@ BEGIN
         pc.sort_order,
         COALESCE(COUNT(pb.id), 0) as products_count
     FROM product_categories pc
-    LEFT JOIN products_base pb ON pb.category = pc.name AND pb.is_active = true
+    LEFT JOIN products p ON p.category = pc.name AND p.is_available = true
     WHERE pc.is_active = true
     GROUP BY pc.id, pc.name, pc.description, pc.icon, pc.color, pc.sort_order
     ORDER BY pc.sort_order, pc.name;
@@ -78,8 +78,8 @@ DECLARE
     products_count INTEGER;
 BEGIN
     SELECT COUNT(*) INTO products_count
-    FROM products_base 
-    WHERE category = category_name AND is_active = true;
+    FROM products
+    WHERE category = category_name AND is_available = true;
     
     RETURN products_count = 0;
 END;
@@ -119,12 +119,11 @@ SELECT
     pc.sort_order,
     pc.created_at,
     pc.updated_at,
-    COALESCE(COUNT(pb.id), 0) as total_products,
-    COALESCE(COUNT(CASE WHEN pb.is_active = true THEN 1 END), 0) as active_products,
-    COALESCE(SUM(pv.stock_quantity), 0) as total_stock
+    COALESCE(COUNT(p.id), 0) as total_products,
+    COALESCE(COUNT(CASE WHEN p.is_available = true THEN 1 END), 0) as active_products,
+    0 as total_stock
 FROM product_categories pc
-LEFT JOIN products_base pb ON pb.category = pc.name
-LEFT JOIN product_variants pv ON pv.product_id = pb.id AND pv.is_available = true
+LEFT JOIN products p ON p.category = pc.name
 GROUP BY pc.id, pc.name, pc.description, pc.icon, pc.color, pc.is_active, pc.sort_order, pc.created_at, pc.updated_at
 ORDER BY pc.sort_order, pc.name;
 
