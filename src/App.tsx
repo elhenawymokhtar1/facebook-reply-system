@@ -17,7 +17,21 @@ import Orders from "./pages/Orders";
 
 import TestPage from "./pages/TestPage";
 import TestSimple from "./pages/TestSimple";
+import TestChat from "./pages/TestChat";
+import SimpleTestChat from "./pages/SimpleTestChat";
 import Categories from "./pages/Categories";
+import EcommerceProducts from "./pages/EcommerceProducts";
+import Shop from "./pages/Shop";
+import Cart from "./pages/Cart";
+import Checkout from "./pages/Checkout";
+import OrderConfirmation from "./pages/OrderConfirmation";
+import OrdersManagement from "./pages/OrdersManagement";
+import CouponsManagement from "./pages/CouponsManagement";
+import ShippingManagement from "./pages/ShippingManagement";
+import EcommerceAnalytics from "./pages/EcommerceAnalytics";
+import StoreSetup from "./pages/StoreSetup";
+import ProductVariants from "./pages/ProductVariants";
+import StoreDashboard from "./pages/StoreDashboard";
 
 import SimpleTest from "./components/SimpleTest";
 import NotFound from "./pages/NotFound";
@@ -70,7 +84,8 @@ const App = () => {
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Index />} />
+            <Route path="/" element={<StoreDashboard />} />
+            <Route path="/store-dashboard" element={<StoreDashboard />} />
             <Route path="/dashboard" element={<Index />} />
             <Route path="/simple" element={<SimpleHomePage />} />
             <Route path="/simple-conversations" element={<SimpleConversationsPage />} />
@@ -78,11 +93,23 @@ const App = () => {
             <Route path="/analytics" element={<Analytics />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/conversations" element={<Conversations />} />
-            <Route path="/orders" element={<Orders />} />
+            <Route path="/orders" element={<OrdersManagement />} />
 
             <Route path="/test" element={<TestPage />} />
             <Route path="/test-simple" element={<TestSimple />} />
+            <Route path="/test-chat" element={<TestChat />} />
+            <Route path="/simple-test-chat" element={<SimpleTestChat />} />
             <Route path="/categories" element={<Categories />} />
+            <Route path="/ecommerce-products" element={<EcommerceProducts />} />
+            <Route path="/shop" element={<Shop />} />
+            <Route path="/cart" element={<Cart />} />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/order-confirmation/:orderId" element={<OrderConfirmation />} />
+            <Route path="/coupons" element={<CouponsManagement />} />
+            <Route path="/shipping" element={<ShippingManagement />} />
+            <Route path="/ecommerce-analytics" element={<EcommerceAnalytics />} />
+            <Route path="/store-setup" element={<StoreSetup />} />
+            <Route path="/product-variants" element={<ProductVariants />} />
 
             <Route path="/simple-test" element={<SimpleTest />} />
             <Route path="*" element={<NotFound />} />

@@ -23,7 +23,7 @@ router.post('/process', async (req, res) => {
   console.log('📝 [GEMINI] Body:', JSON.stringify(req.body, null, 2));
 
   try {
-    const { senderId, messageText, pageId } = req.body;
+    const { senderId, messageText, pageId, conversationId: customConversationId } = req.body;
 
     if (!senderId || !messageText || !pageId) {
       return res.status(400).json({
@@ -32,8 +32,9 @@ router.post('/process', async (req, res) => {
       });
     }
 
-    // إنشاء conversation ID مؤقت
-    const conversationId = `temp_${senderId}_${Date.now()}`;
+    // استخدام conversation ID مخصص إذا تم توفيره، وإلا إنشاء مؤقت
+    const conversationId = customConversationId || `temp_${senderId}_${pageId}`;
+    console.log('🆔 [GEMINI] Using conversation ID:', conversationId);
 
     console.log('🚀 Processing message with simple processor...');
     const success = await SimpleGeminiService.processMessage(
@@ -80,6 +81,8 @@ router.get('/settings', async (req, res) => {
         api_key: '',
         model: 'gemini-1.5-flash',
         prompt_template: '',
+        personality_prompt: '',
+        products_prompt: '',
         is_enabled: false,
         max_tokens: 1000,
         temperature: 0.7

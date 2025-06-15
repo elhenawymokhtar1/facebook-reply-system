@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useGeminiSettings } from "@/hooks/useGeminiAi";
-import { Loader2, Bot, TestTube, Save, AlertCircle, RefreshCw, Package } from "lucide-react";
+import { Loader2, Bot, TestTube, Save, AlertCircle, RefreshCw, Package, User, Zap, Settings } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SmartProductsClientAPI } from "@/utils/smart-products-client";
 import { toast } from "sonner";
@@ -20,6 +20,8 @@ export const GeminiSettings: React.FC = () => {
     api_key: '',
     model: 'gemini-1.5-flash',
     prompt_template: '',
+    personality_prompt: '',
+    products_prompt: '',
     is_enabled: false,
     max_tokens: 1000,
     temperature: 0.7
@@ -33,6 +35,8 @@ export const GeminiSettings: React.FC = () => {
         api_key: settings.api_key || '',
         model: settings.model || 'gemini-1.5-flash',
         prompt_template: settings.prompt_template || '',
+        personality_prompt: settings.personality_prompt || '',
+        products_prompt: settings.products_prompt || '',
         is_enabled: settings.is_enabled || false,
         max_tokens: settings.max_tokens || 1000,
         temperature: settings.temperature || 0.7
@@ -418,63 +422,101 @@ export const GeminiSettings: React.FC = () => {
             </p>
           </div>
 
-          {/* البرومت */}
+          {/* البرومت الأساسي */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="prompt">البرومت (التعليمات)</Label>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={updatePromptWithSmartAPI}
-                  className="text-green-600 hover:text-green-700"
-                >
-                  <Bot className="w-4 h-4 mr-1" />
-                  النظام الذكي الجديد
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={updatePromptWithProducts}
-                  className="text-blue-600 hover:text-blue-700"
-                >
-                  <Package className="w-4 h-4 mr-1" />
-                  الطريقة القديمة
-                </Button>
-              </div>
-            </div>
+            <Label htmlFor="prompt_template" className="flex items-center gap-2">
+              <Bot className="w-4 h-4" />
+              البرومت الأساسي الرئيسي
+            </Label>
             <Textarea
-              id="prompt"
-              placeholder="أدخل التعليمات للذكاء الاصطناعي..."
+              id="prompt_template"
+              placeholder="أنت مساعد ذكي لمتجر سوان شوب..."
               value={formData.prompt_template}
               onChange={(e) =>
                 setFormData(prev => ({ ...prev, prompt_template: e.target.value }))
               }
-              rows={12}
+              rows={8}
               className="resize-none font-mono text-sm"
             />
+            <p className="text-xs text-muted-foreground">
+              البرومت الرئيسي الذي يحدد سلوك الذكاء الاصطناعي بشكل عام
+            </p>
+          </div>
+
+          {/* النظام الهجين الجديد - البرومت المنفصل */}
+          <div className="space-y-6">
+            <div className="flex items-center gap-2 p-3 bg-gradient-to-r from-blue-50 to-green-50 border border-blue-200 rounded-lg">
+              <Bot className="w-5 h-5 text-blue-600" />
+              <div className="text-sm font-medium text-blue-900">
+                🚀 النظام الهجين الذكي - برومت منفصل للشخصية والمنتجات (اختياري)
+              </div>
+            </div>
+
+            {/* ملاحظة النظام الهجين */}
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-xs text-amber-700">
+                <strong>💡 ملاحظة:</strong> إذا تركت البرومت الهجين فارغاً، سيتم استخدام البرومت الأساسي فقط.
+                النظام الهجين يوفر مرونة أكثر ولكنه اختياري.
+              </p>
+            </div>
+
+            {/* برومت الشخصية */}
+            <div className="space-y-2">
+              <Label htmlFor="personality_prompt" className="flex items-center gap-2">
+                <User className="w-4 h-4" />
+                برومت الشخصية والأسلوب (اختياري)
+              </Label>
+              <Textarea
+                id="personality_prompt"
+                placeholder="أنت مساعد ودود لمتجر سوان شوب. اسمك سارة..."
+                value={formData.personality_prompt}
+                onChange={(e) =>
+                  setFormData(prev => ({ ...prev, personality_prompt: e.target.value }))
+                }
+                rows={6}
+                className="resize-none font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                حددي شخصية المساعد وأسلوب الكلام والطريقة التي يتفاعل بها مع العملاء (يُستخدم مع البرومت الأساسي)
+              </p>
+            </div>
+
+            {/* برومت المنتجات */}
+            <div className="space-y-2">
+              <Label htmlFor="products_prompt" className="flex items-center gap-2">
+                <Package className="w-4 h-4" />
+                برومت قواعد المنتجات والمبيعات (اختياري)
+              </Label>
+              <Textarea
+                id="products_prompt"
+                placeholder="قواعد التعامل مع المنتجات..."
+                value={formData.products_prompt}
+                onChange={(e) =>
+                  setFormData(prev => ({ ...prev, products_prompt: e.target.value }))
+                }
+                rows={8}
+                className="resize-none font-mono text-sm"
+              />
+              <p className="text-xs text-muted-foreground">
+                قواعد عرض المنتجات والأسعار والشراء ومعلومات التواصل (يُضاف للبرومت الأساسي عند الحاجة)
+              </p>
+            </div>
+
+            {/* معلومات النظام الهجين */}
             <div className="space-y-3">
               <div className="flex items-start gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <Bot className="w-4 h-4 text-green-600 mt-0.5" />
+                <Zap className="w-4 h-4 text-green-600 mt-0.5" />
                 <div className="text-xs text-green-700">
-                  <strong>🚀 جديد:</strong> النظام الذكي الجديد يقرأ المنتجات مباشرة من الـ API!
-                  لا حاجة لنسخ ولصق معلومات المنتجات. النظام محدث تلقائياً ومجهز لـ WooCommerce.
-                  <Button
-                    variant="link"
-                    size="sm"
-                    onClick={() => window.open('/smart-api-test', '_blank')}
-                    className="text-green-600 hover:text-green-700 p-0 h-auto ml-2"
-                  >
-                    اختبر النظام الجديد
-                  </Button>
+                  <strong>⚡ توفير Tokens:</strong> النظام يستخدم برومت الشخصية فقط للأسئلة العادية،
+                  ويضيف برومت المنتجات فقط عند السؤال عن المنتجات - توفير يصل إلى 70%!
                 </div>
               </div>
 
               <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                <Package className="w-4 h-4 text-blue-600 mt-0.5" />
+                <Settings className="w-4 h-4 text-blue-600 mt-0.5" />
                 <div className="text-xs text-blue-700">
-                  <strong>📦 الطريقة القديمة:</strong> تحديث البرومت بمعلومات المنتجات المحفوظة.
-                  مناسبة للاختبار أو إذا كنت تفضل الطريقة التقليدية.
+                  <strong>🎛️ مرونة كاملة:</strong> يمكنك تعديل الشخصية بدون تأثير على قواعد المنتجات،
+                  وتعديل قواعد المنتجات بدون تأثير على الشخصية.
                 </div>
               </div>
             </div>

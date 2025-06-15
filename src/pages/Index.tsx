@@ -2,12 +2,16 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { MessageSquare, Users, Clock, TrendingUp, Plus, Settings, Eye, RefreshCw } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { MessageSquare, Users, Clock, TrendingUp, Plus, Settings, Eye, RefreshCw, Activity, Store, ShoppingBag, Package } from "lucide-react";
 import { Link } from "react-router-dom";
 import Navigation from "@/components/Navigation";
 import StatsCard from "@/components/StatsCard";
 import RecentMessages from "@/components/RecentMessages";
 import QuickActions from "@/components/QuickActions";
+import CompactQuickActions from "@/components/CompactQuickActions";
+import EnhancedQuickActions from "@/components/EnhancedQuickActions";
+import QuickStatsBar from "@/components/QuickStatsBar";
 
 const Index = () => {
   console.log('📊 Index page is rendering...');
@@ -136,16 +140,24 @@ const Index = () => {
           />
         </div>
 
+        {/* Quick Stats Bar */}
+        <QuickStatsBar />
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Quick Actions */}
           <div className="lg:col-span-1">
-            <QuickActions />
+            <CompactQuickActions />
           </div>
 
           {/* Recent Messages */}
           <div className="lg:col-span-2">
             <RecentMessages />
           </div>
+        </div>
+
+        {/* Enhanced Quick Actions */}
+        <div className="mt-8">
+          <EnhancedQuickActions />
         </div>
       </div>
     </div>

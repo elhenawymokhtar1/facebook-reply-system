@@ -14,6 +14,12 @@ import {
   ShoppingBag,
   Layers,
   Tags,
+  Store,
+  ShoppingCart,
+  Truck,
+  TrendingUp,
+  Rocket,
+  TestTube,
 
 } from "lucide-react";
 
@@ -22,12 +28,18 @@ const Navigation = () => {
 
   const navItems = [
     { to: "/", icon: Home, label: "الرئيسية" },
+    { to: "/store-setup", icon: Rocket, label: "إعداد المتجر", highlight: true },
+    { to: "/test-chat", icon: TestTube, label: "محاكي المحادثات", highlight: true },
     { to: "/conversations", icon: MessageCircle, label: "المحادثات" },
     { to: "/orders", icon: Package, label: "الطلبات" },
-
-
+    { to: "/ecommerce-products", icon: ShoppingBag, label: "إدارة المنتجات" },
+    { to: "/coupons", icon: Tags, label: "الكوبونات" },
+    { to: "/shipping", icon: Truck, label: "الشحن" },
+    { to: "/shop", icon: Store, label: "المتجر" },
+    { to: "/cart", icon: ShoppingCart, label: "السلة" },
+    { to: "/ecommerce-analytics", icon: BarChart3, label: "تحليلات المتجر" },
     { to: "/responses", icon: MessageSquare, label: "الردود الآلية" },
-    { to: "/analytics", icon: BarChart3, label: "الإحصائيات" },
+    { to: "/analytics", icon: TrendingUp, label: "الإحصائيات العامة" },
     { to: "/settings", icon: Settings, label: "الإعدادات" }
   ];
 
@@ -59,11 +71,18 @@ const Navigation = () => {
                     className={`flex items-center space-x-2 space-x-reverse ${
                       isActive
                         ? "bg-gradient-to-r from-blue-600 to-purple-600 text-white"
+                        : item.highlight
+                        ? "bg-gradient-to-r from-green-500 to-blue-500 text-white hover:from-green-600 hover:to-blue-600"
                         : "text-gray-600 hover:text-gray-900"
                     }`}
                   >
                     <Icon className="w-4 h-4" />
                     <span>{item.label}</span>
+                    {item.highlight && (
+                      <span className="text-xs bg-white bg-opacity-20 px-2 py-1 rounded-full mr-2">
+                        جديد
+                      </span>
+                    )}
                   </Button>
                 </Link>
               );

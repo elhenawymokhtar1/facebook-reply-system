@@ -69,15 +69,16 @@ app.post('/api/gemini-temp/process', async (req, res) => {
       });
     }
 
-    // استدعاء المعالج مباشرة
-    const { GeminiMessageProcessor } = await import('../services/geminiMessageProcessor');
+    // استدعاء المعالج الصحيح
+    const { SimpleGeminiService } = await import('../services/simpleGeminiService');
     const conversationId = `temp_${senderId}_${Date.now()}`;
 
-    console.log('🚀 Calling temp processor...');
-    const success = await GeminiMessageProcessor.processIncomingMessage(
+    console.log('🚀 Calling SimpleGeminiService processor...');
+    const success = await SimpleGeminiService.processMessage(
       messageText,
       conversationId,
-      senderId
+      senderId,
+      pageId
     );
 
     res.json({

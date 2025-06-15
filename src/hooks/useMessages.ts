@@ -252,6 +252,7 @@ export const useMessages = (conversationId: string | null) => {
     console.log('🔄 Setting up message subscription for conversation:', conversationId);
 
     let debounceTimeout: NodeJS.Timeout;
+    let lastMessageId: string | null = null;
 
     const channel = supabase
       .channel(`messages-${conversationId}`)
@@ -266,11 +267,19 @@ export const useMessages = (conversationId: string | null) => {
         (payload) => {
           console.log('📥 New message received via real-time:', payload);
 
-          // تجنب التحديث المضاعف باستخدام debounce
+          // تجنب معالجة نفس الرسالة مرتين
+          const messageId = payload.new?.id;
+          if (messageId === lastMessageId) {
+            console.log('⚠️ Duplicate real-time message detected, skipping...');
+            return;
+          }
+          lastMessageId = messageId;
+
+          // تحديث فوري للرسائل الجديدة
           clearTimeout(debounceTimeout);
           debounceTimeout = setTimeout(() => {
             queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
-          }, 500); // انتظار 500ms قبل التحديث
+          }, 200); // تحديث سريع
         }
       )
       .on(
