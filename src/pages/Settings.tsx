@@ -1,7 +1,6 @@
 
 import { useState } from "react";
-import Navigation from "@/components/Navigation";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,11 +8,11 @@ import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Facebook, Key, Bell, Clock, Shield, Loader2, CheckCircle, AlertCircle, Bot, Activity, Trash2, Power, RotateCcw, AlertTriangle, Unplug } from "lucide-react";
+import { Facebook, Key, Bell, Clock, Shield, Loader2, CheckCircle, AlertCircle, Bot, Activity, Trash2, Power, RotateCcw, AlertTriangle, Unplug, MessageSquare } from "lucide-react";
 import WebhookDiagnostics from "@/components/WebhookDiagnostics";
 import { useToast } from "@/hooks/use-toast";
 import { useFacebookApi } from "@/hooks/useFacebookApi";
-import { GeminiSettings } from "@/components/GeminiSettings";
+
 
 
 const Settings = () => {
@@ -168,9 +167,7 @@ const Settings = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100" dir="rtl">
-      <Navigation />
-
+    <div className="h-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 overflow-y-auto" dir="rtl">
       <div className="container mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-8">
@@ -735,16 +732,60 @@ const Settings = () => {
 
 
 
-          {/* Gemini AI Settings */}
+          {/* Quick Access to AI Settings */}
           <Card className="lg:col-span-3">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2 space-x-reverse">
                 <Bot className="w-5 h-5 text-purple-600" />
-                <span>Gemini AI - الذكاء الاصطناعي</span>
+                <span>إعدادات الذكاء الاصطناعي</span>
               </CardTitle>
+              <CardDescription>
+                الوصول السريع لإعدادات Gemini AI للمنصات المختلفة
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <GeminiSettings />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <MessageSquare className="w-5 h-5 text-green-600" />
+                      إعدادات الواتساب
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-600 mb-4">
+                      تكوين Gemini AI للرد التلقائي على رسائل WhatsApp
+                    </p>
+                    <Button
+                      onClick={() => window.location.href = '/whatsapp-gemini-settings'}
+                      className="w-full"
+                    >
+                      فتح إعدادات الواتساب
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2 text-lg">
+                      <Facebook className="w-5 h-5 text-blue-600" />
+                      إعدادات الفيسبوك
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-sm text-gray-600 mb-4">
+                      تكوين Gemini AI للرد التلقائي على رسائل وتعليقات Facebook
+                    </p>
+                    <Button
+                      onClick={() => window.location.href = '/facebook-ai-settings'}
+                      className="w-full"
+                      variant="outline"
+                    >
+                      فتح إعدادات الفيسبوك
+                    </Button>
+                  </CardContent>
+                </Card>
+              </div>
             </CardContent>
           </Card>
 

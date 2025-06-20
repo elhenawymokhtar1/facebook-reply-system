@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MessageSquare, Users, Clock, TrendingUp, Plus, Settings, Eye, RefreshCw, Activity, Store, ShoppingBag, Package } from "lucide-react";
 import { Link } from "react-router-dom";
-import Navigation from "@/components/Navigation";
 import StatsCard from "@/components/StatsCard";
 import RecentMessages from "@/components/RecentMessages";
 import QuickActions from "@/components/QuickActions";
@@ -62,9 +61,7 @@ const Index = () => {
   const currentStats = stats || defaultStats;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100" dir="rtl">
-      <Navigation />
-
+    <div className="h-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 overflow-y-auto" dir="rtl">
       <div className="container mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-8">

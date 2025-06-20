@@ -2,7 +2,6 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import Navigation from "@/components/Navigation";
 import {
   Rocket,
   Store,
@@ -127,8 +126,7 @@ const StoreDashboard = () => {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50" dir="rtl">
-      <Navigation />
+    <div className="h-full bg-gray-50 overflow-y-auto" dir="rtl">
       <div className="container mx-auto px-6 py-8">
       {/* Header */}
       <div className="text-center mb-8">

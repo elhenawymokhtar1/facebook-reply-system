@@ -511,6 +511,8 @@ const createDefaultStore = async () => {
   }
 };
 
+
+
 // دالة لتشغيل الإعداد
 export const initializeDatabase = async () => {
   console.log('🚀 Initializing database...');

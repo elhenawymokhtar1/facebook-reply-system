@@ -5,20 +5,27 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { useEffect } from "react";
+import Sidebar from "./components/Sidebar";
+import HomePage from "./pages/HomePage";
 import Index from "./pages/Index";
-import SimpleHomePage from "./components/SimpleHomePage";
-import SimpleConversationsPage from "./components/SimpleConversationsPage";
 import Responses from "./pages/Responses";
 import Analytics from "./pages/Analytics";
 import Settings from "./pages/Settings";
 import Conversations from "./pages/Conversations";
+import WhatsAppConversations from "./pages/WhatsAppConversations";
 
 import Orders from "./pages/Orders";
 
-import TestPage from "./pages/TestPage";
-import TestSimple from "./pages/TestSimple";
-import TestChat from "./pages/TestChat";
 import SimpleTestChat from "./pages/SimpleTestChat";
+import WhatsAppBaileys from "./pages/WhatsAppBaileys";
+import WhatsAppAdvanced from "./pages/WhatsAppAdvanced";
+import WhatsAppConnection from "./pages/WhatsAppConnection";
+import WhatsAppChatPage from "./pages/WhatsAppChatPage";
+import WhatsAppTest from "./pages/WhatsAppTest";
+import { WhatsAppAI } from "./pages/WhatsAppAI";
+import { GeminiAISettings } from "./pages/GeminiAISettings";
+import { FacebookAISettings } from "./pages/FacebookAISettings";
+
 import Categories from "./pages/Categories";
 import EcommerceProducts from "./pages/EcommerceProducts";
 import Shop from "./pages/Shop";
@@ -33,7 +40,6 @@ import StoreSetup from "./pages/StoreSetup";
 import ProductVariants from "./pages/ProductVariants";
 import StoreDashboard from "./pages/StoreDashboard";
 
-import SimpleTest from "./components/SimpleTest";
 import NotFound from "./pages/NotFound";
 import { NameUpdateService } from "./services/nameUpdateService";
 import { initializeDatabase } from "./utils/setupDatabase";
@@ -59,9 +65,9 @@ const App = () => {
 
     try {
       NameUpdateService.startAutoUpdate();
-      // إعداد قاعدة البيانات
-      initializeDatabase();
-      console.log('✅ تم تحميل التطبيق بنجاح');
+      // إعداد قاعدة البيانات - معطل مؤقتاً للاختبار
+      // initializeDatabase();
+      console.log('✅ تم تحميل التطبيق بنجاح (بدون تهيئة قاعدة البيانات)');
     } catch (error) {
       console.error('❌ خطأ في بدء التطبيق:', error);
     }
@@ -83,37 +89,57 @@ const App = () => {
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<StoreDashboard />} />
-            <Route path="/store-dashboard" element={<StoreDashboard />} />
-            <Route path="/dashboard" element={<Index />} />
-            <Route path="/simple" element={<SimpleHomePage />} />
-            <Route path="/simple-conversations" element={<SimpleConversationsPage />} />
-            <Route path="/responses" element={<Responses />} />
-            <Route path="/analytics" element={<Analytics />} />
-            <Route path="/settings" element={<Settings />} />
-            <Route path="/conversations" element={<Conversations />} />
-            <Route path="/orders" element={<OrdersManagement />} />
+          <div className="flex h-screen bg-gray-50">
+            <Sidebar />
+            <main className="flex-1 overflow-hidden">
+              <div className="h-full overflow-y-auto">
+                <Routes>
+                  <Route path="/" element={<HomePage />} />
+                  <Route path="/store-dashboard" element={<StoreDashboard />} />
+                  <Route path="/dashboard" element={<Index />} />
+                  <Route path="/responses" element={<Responses />} />
+                  <Route path="/analytics" element={<Analytics />} />
+                  <Route path="/settings" element={<Settings />} />
+                  <Route path="/conversations" element={<Conversations />} />
+                  <Route path="/whatsapp-conversations" element={<WhatsAppConversations />} />
+                  <Route path="/whatsapp" element={<WhatsAppConnection />} />
+                  <Route path="/whatsapp-ai-settings" element={<WhatsAppAI />} />
+                  <Route path="/whatsapp-chat" element={<WhatsAppChatPage />} />
+                  <Route path="/whatsapp-test" element={<WhatsAppTest />} />
+                  <Route path="/whatsapp-advanced" element={<WhatsAppAdvanced />} />
+                  <Route path="/whatsapp-basic" element={<WhatsAppBaileys />} />
+                  <Route path="/whatsapp-ai" element={<WhatsAppAI />} />
 
-            <Route path="/test" element={<TestPage />} />
-            <Route path="/test-simple" element={<TestSimple />} />
-            <Route path="/test-chat" element={<TestChat />} />
-            <Route path="/simple-test-chat" element={<SimpleTestChat />} />
-            <Route path="/categories" element={<Categories />} />
-            <Route path="/ecommerce-products" element={<EcommerceProducts />} />
-            <Route path="/shop" element={<Shop />} />
-            <Route path="/cart" element={<Cart />} />
-            <Route path="/checkout" element={<Checkout />} />
-            <Route path="/order-confirmation/:orderId" element={<OrderConfirmation />} />
-            <Route path="/coupons" element={<CouponsManagement />} />
-            <Route path="/shipping" element={<ShippingManagement />} />
-            <Route path="/ecommerce-analytics" element={<EcommerceAnalytics />} />
-            <Route path="/store-setup" element={<StoreSetup />} />
-            <Route path="/product-variants" element={<ProductVariants />} />
+                  {/* Gemini AI Settings */}
+                  <Route path="/gemini-ai-settings" element={<GeminiAISettings />} />
+                  <Route path="/whatsapp-gemini-settings" element={<GeminiAISettings />} />
 
-            <Route path="/simple-test" element={<SimpleTest />} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+                  {/* Facebook Routes */}
+                  <Route path="/facebook-conversations" element={<Conversations />} />
+                  <Route path="/facebook-settings" element={<Settings />} />
+                  <Route path="/facebook-ai-settings" element={<FacebookAISettings />} />
+
+                  <Route path="/orders" element={<OrdersManagement />} />
+
+                  {/* Test Route - محاكي الدردشة */}
+                  <Route path="/simple-test-chat" element={<SimpleTestChat />} />
+                  <Route path="/categories" element={<Categories />} />
+                  <Route path="/ecommerce-products" element={<EcommerceProducts />} />
+                  <Route path="/shop" element={<Shop />} />
+                  <Route path="/cart" element={<Cart />} />
+                  <Route path="/checkout" element={<Checkout />} />
+                  <Route path="/order-confirmation/:orderId" element={<OrderConfirmation />} />
+                  <Route path="/coupons" element={<CouponsManagement />} />
+                  <Route path="/shipping" element={<ShippingManagement />} />
+                  <Route path="/ecommerce-analytics" element={<EcommerceAnalytics />} />
+                  <Route path="/store-setup" element={<StoreSetup />} />
+                  <Route path="/product-variants" element={<ProductVariants />} />
+
+                  <Route path="*" element={<NotFound />} />
+                </Routes>
+              </div>
+            </main>
+          </div>
         </BrowserRouter>
       </TooltipProvider>
     </QueryClientProvider>

@@ -18,7 +18,7 @@ export const useGeminiSettings = () => {
   const { data: settings, isLoading, error } = useQuery({
     queryKey: ['gemini-settings'],
     queryFn: async () => {
-      const response = await fetch('http://localhost:8082/api/gemini/settings');
+      const response = await fetch('http://localhost:3002/api/gemini/settings');
       if (!response.ok) {
         throw new Error('Failed to fetch Gemini settings');
       }
@@ -29,7 +29,7 @@ export const useGeminiSettings = () => {
   // حفظ إعدادات Gemini
   const saveSettings = useMutation({
     mutationFn: async (newSettings: Partial<GeminiSettings>) => {
-      const response = await fetch('http://localhost:8082/api/gemini/settings', {
+      const response = await fetch('http://localhost:3002/api/gemini/settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -64,7 +64,7 @@ export const useGeminiSettings = () => {
   // اختبار الاتصال مع Gemini
   const testConnection = useMutation({
     mutationFn: async (apiKey: string) => {
-      const response = await fetch('http://localhost:8082/api/gemini/test', {
+      const response = await fetch('http://localhost:3002/api/gemini/test', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

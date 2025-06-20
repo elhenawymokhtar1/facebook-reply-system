@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Chat - إعادة توجيه</title>
+    <style>
+        body {
+            font-family: 'Cairo', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+        .container {
+            background: rgba(255,255,255,0.1);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+        }
+        p {
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+        }
+        .countdown {
+            font-size: 3rem;
+            font-weight: bold;
+            margin: 20px 0;
+        }
+        a {
+            background: #4ade80;
+            color: white;
+            padding: 15px 30px;
+            border-radius: 10px;
+            text-decoration: none;
+            font-size: 1.2rem;
+            margin: 10px;
+            display: inline-block;
+        }
+        a:hover {
+            background: #22c55e;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔄 إعادة توجيه</h1>
+        <p>سيتم توجيهك إلى صفحة WhatsApp Chat خلال:</p>
+        <div class="countdown" id="countdown">3</div>
+        <p>أو يمكنك الضغط على الرابط أدناه:</p>
+        <a href="/simple-chat.html">🚀 الذهاب إلى WhatsApp Chat</a>
+        <br>
+        <a href="/test.html">🧪 صفحة الاختبار</a>
+    </div>
+
+    <script>
+        let count = 3;
+        const countdownEl = document.getElementById('countdown');
+        
+        const timer = setInterval(() => {
+            count--;
+            countdownEl.textContent = count;
+            
+            if (count <= 0) {
+                clearInterval(timer);
+                window.location.href = '/simple-chat.html';
+            }
+        }, 1000);
+    </script>
+</body>
+</html>

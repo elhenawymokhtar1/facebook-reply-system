@@ -45,23 +45,23 @@ export default function WebhookDiagnostics() {
   const checkWebhookStatus = async () => {
     setIsChecking(true);
     try {
-      // فحص الـ Webhook المحلي
-      const webhookResponse = await fetch('http://localhost:3001/health');
+      // فحص الـ Webhook المحلي على المنفذ الصحيح
+      const webhookResponse = await fetch('http://localhost:3002/health');
       const webhookData = await webhookResponse.json();
 
       // فحص ngrok
       let ngrokStatus: 'connected' | 'disconnected' | 'error' = 'disconnected';
       let ngrokUrl = '';
-      
+
       try {
         const ngrokResponse = await fetch('http://localhost:4040/api/tunnels');
         const ngrokData = await ngrokResponse.json();
-        
+
         if (ngrokData.tunnels && ngrokData.tunnels.length > 0) {
-          const tunnel = ngrokData.tunnels.find((t: any) => 
-            t.config?.addr === 'http://localhost:3001'
+          const tunnel = ngrokData.tunnels.find((t: any) =>
+            t.config?.addr === 'http://localhost:3002'
           );
-          
+
           if (tunnel) {
             ngrokStatus = 'connected';
             ngrokUrl = tunnel.public_url;
@@ -73,7 +73,7 @@ export default function WebhookDiagnostics() {
 
       setStatus({
         isRunning: webhookResponse.ok,
-        port: 3001,
+        port: 3002,
         uptime: webhookData.uptime || 0,
         lastCheck: new Date().toLocaleTimeString('ar-EG'),
         ngrokStatus,
@@ -125,7 +125,7 @@ export default function WebhookDiagnostics() {
         }]
       };
 
-      const response = await fetch('http://localhost:3001/webhook', {
+      const response = await fetch('http://localhost:3002/webhook', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(testMessage)
@@ -322,9 +322,9 @@ export default function WebhookDiagnostics() {
             >
               إرسال رسالة اختبار
             </Button>
-            <Button 
-              variant="outline" 
-              onClick={() => window.open('http://localhost:3001/health', '_blank')}
+            <Button
+              variant="outline"
+              onClick={() => window.open('http://localhost:3002/health', '_blank')}
               className="w-full"
             >
               فتح صفحة الحالة
@@ -361,9 +361,9 @@ export default function WebhookDiagnostics() {
           <AlertDescription>
             <strong>الـ Webhook غير شغال!</strong>
             <br />
-            لتشغيله: <code>npm run webhook</code>
+            لتشغيله: <code>npm run api</code>
             <br />
-            لتشغيل ngrok: <code>ngrok http 3001</code>
+            لتشغيل ngrok: <code>ngrok http 3002</code>
           </AlertDescription>
         </Alert>
       )}
@@ -374,7 +374,7 @@ export default function WebhookDiagnostics() {
           <AlertDescription>
             <strong>ngrok غير متصل!</strong>
             <br />
-            لتشغيل ngrok: <code>ngrok http 3001</code>
+            لتشغيل ngrok: <code>ngrok http 3002</code>
             <br />
             تأكد من تثبيت ngrok وإضافة auth token
           </AlertDescription>

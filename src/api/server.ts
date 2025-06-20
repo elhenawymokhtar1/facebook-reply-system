@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js';
 import { NameUpdateService } from '../services/nameUpdateService';
 import { processIncomingMessage } from './process-message';
 import geminiRouter from './gemini-routes';
+import whatsappBaileysRoutes from './whatsapp-baileys-routes';
 import { forceUpdateAllUserNames } from '../services/forceUpdateNames';
 
 // تحميل متغيرات البيئة
@@ -53,6 +54,130 @@ app.use((req, res, next) => {
 console.log('🤖 Setting up Gemini AI routes...');
 // استخدام مسارات Gemini المنفصلة
 app.use('/api/gemini', geminiRouter);
+
+console.log('📱 Setting up WhatsApp Baileys routes...');
+// استخدام مسارات WhatsApp Baileys الحقيقية
+try {
+  app.use('/api/whatsapp-baileys', whatsappBaileysRoutes);
+  console.log('✅ WhatsApp Baileys routes loaded successfully');
+} catch (error) {
+  console.error('❌ Error loading WhatsApp Baileys routes:', error);
+
+  // مسارات احتياطية في حالة فشل التحميل
+  app.get('/api/whatsapp-baileys/test', (req, res) => {
+    console.log('🧪 WhatsApp Baileys test endpoint hit! (fallback)');
+    res.json({ success: true, message: 'WhatsApp Baileys API is working! (fallback)' });
+  });
+}
+
+// إضافة مسارات WhatsApp AI Settings مباشرة كـ fallback
+console.log('🤖 Setting up WhatsApp AI Settings fallback routes...');
+
+app.get('/api/whatsapp-baileys/ai-settings', async (req, res) => {
+  try {
+    console.log('🤖 [API] جلب إعدادات WhatsApp AI (fallback)...');
+
+    const { data: settings, error } = await supabase
+      .from('whatsapp_ai_settings')
+      .select('*')
+      .limit(1)
+      .single();
+
+    if (error && error.code !== 'PGRST116') {
+      console.error('❌ [API] خطأ في قاعدة البيانات:', error);
+      throw error;
+    }
+
+    if (!settings) {
+      console.log('📝 [API] لا توجد إعدادات، إرجاع الإعدادات الافتراضية...');
+      const defaultSettings = {
+        is_enabled: false,
+        use_existing_prompt: true,
+        custom_prompt: 'أنت مساعد ذكي لمتجر WhatsApp. اسمك سارة وأنت بائعة لطيفة ومتفهمة.',
+        api_key: '',
+        model: 'gemini-1.5-flash',
+        temperature: 0.7,
+        max_tokens: 1000,
+        can_access_orders: true,
+        can_access_products: true,
+        auto_reply_enabled: true
+      };
+
+      return res.json({
+        success: true,
+        settings: defaultSettings
+      });
+    }
+
+    console.log('✅ [API] تم جلب إعدادات WhatsApp AI بنجاح');
+    res.json({
+      success: true,
+      settings: settings
+    });
+  } catch (error) {
+    console.error('❌ [API] خطأ في جلب إعدادات WhatsApp AI:', error);
+    res.status(500).json({
+      success: false,
+      error: 'فشل في جلب الإعدادات: ' + (error.message || 'خطأ غير معروف')
+    });
+  }
+});
+
+app.post('/api/whatsapp-baileys/ai-settings', async (req, res) => {
+  try {
+    console.log('💾 [API] حفظ إعدادات WhatsApp AI (fallback)...');
+    console.log('📝 [API] البيانات المرسلة:', req.body);
+
+    const settings = req.body;
+
+    // التحقق من وجود سجل موجود
+    const { data: existingSettings, error: selectError } = await supabase
+      .from('whatsapp_ai_settings')
+      .select('id')
+      .limit(1)
+      .single();
+
+    if (selectError && selectError.code !== 'PGRST116') {
+      throw selectError;
+    }
+
+    let result;
+    if (existingSettings) {
+      // تحديث السجل الموجود
+      console.log('🔄 [API] تحديث السجل الموجود...');
+      result = await supabase
+        .from('whatsapp_ai_settings')
+        .update({
+          ...settings,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', existingSettings.id);
+    } else {
+      // إنشاء سجل جديد
+      console.log('➕ [API] إنشاء سجل جديد...');
+      result = await supabase
+        .from('whatsapp_ai_settings')
+        .insert(settings);
+    }
+
+    if (result.error) {
+      throw result.error;
+    }
+
+    console.log('✅ [API] تم حفظ إعدادات WhatsApp AI بنجاح');
+
+    res.json({
+      success: true,
+      message: 'تم حفظ الإعدادات بنجاح'
+    });
+  } catch (error) {
+    console.error('❌ [API] خطأ في حفظ إعدادات WhatsApp AI:', error);
+    res.status(500).json({
+      success: false,
+      error: 'فشل في حفظ الإعدادات: ' + (error.message || 'خطأ غير معروف')
+    });
+  }
+});
 
 // مسار مؤقت لاختبار معالجة الرسائل
 app.post('/api/gemini-temp/process', async (req, res) => {
@@ -899,6 +1024,22 @@ app.get('/', (req, res) => {
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'OK', service: 'Message Processing API' });
+});
+
+// Health check with detailed info for webhook diagnostics
+app.get('/health', (req, res) => {
+  const uptime = process.uptime();
+  res.json({
+    status: 'OK',
+    service: 'Facebook Reply Automator API',
+    uptime: uptime,
+    port: PORT,
+    timestamp: new Date().toISOString(),
+    messagesReceived: 0, // يمكن إضافة عداد حقيقي لاحقاً
+    messagesIgnored: 0,
+    lastMessageTime: null,
+    errors: []
+  });
 });
 
 // Test endpoint

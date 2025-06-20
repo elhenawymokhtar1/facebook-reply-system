@@ -1,6 +1,5 @@
 
 import { useState } from "react";
-import Navigation from "@/components/Navigation";
 import ConversationsList from "@/components/ConversationsList";
 import ChatWindow from "@/components/ChatWindow";
 
@@ -8,10 +7,8 @@ const Conversations = () => {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
 
   return (
-    <div className="conversations-page-container bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100" dir="rtl">
-      <Navigation />
-
-      <div className="container mx-auto px-6 py-8 flex-1 flex flex-col overflow-hidden">
+    <div className="h-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100" dir="rtl">
+      <div className="container mx-auto px-6 py-8 h-full flex flex-col overflow-hidden">
         <div className="mb-8 flex-shrink-0">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">

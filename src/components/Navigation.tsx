@@ -20,7 +20,8 @@ import {
   TrendingUp,
   Rocket,
   TestTube,
-
+  Phone,
+  Bot
 } from "lucide-react";
 
 const Navigation = () => {
@@ -30,7 +31,11 @@ const Navigation = () => {
     { to: "/", icon: Home, label: "الرئيسية" },
     { to: "/store-setup", icon: Rocket, label: "إعداد المتجر", highlight: true },
     { to: "/test-chat", icon: TestTube, label: "محاكي المحادثات", highlight: true },
-    { to: "/conversations", icon: MessageCircle, label: "المحادثات" },
+    { to: "/conversations", icon: MessageCircle, label: "محادثات فيسبوك" },
+    { to: "/whatsapp-conversations", icon: MessageCircle, label: "محادثات واتساب", highlight: true },
+    { to: "/whatsapp", icon: Phone, label: "إدارة WhatsApp", highlight: true },
+    { to: "/whatsapp-chat", icon: MessageCircle, label: "دردشة WhatsApp", highlight: true },
+    { to: "/whatsapp-ai", icon: Bot, label: "ذكاء اصطناعي WhatsApp", highlight: true },
     { to: "/orders", icon: Package, label: "الطلبات" },
     { to: "/ecommerce-products", icon: ShoppingBag, label: "إدارة المنتجات" },
     { to: "/coupons", icon: Tags, label: "الكوبونات" },

@@ -172,7 +172,7 @@ const SimpleTestChat = () => {
   }, [messages]);
 
   return (
-    <div className="min-h-screen bg-gray-50" dir="rtl">
+    <div className="h-full bg-gray-50 overflow-y-auto" dir="rtl">
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="container mx-auto px-6 py-4">

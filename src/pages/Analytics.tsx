@@ -1,5 +1,4 @@
 
-import Navigation from "@/components/Navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from "recharts";
 import { useState, useEffect } from "react";
@@ -79,9 +78,7 @@ const Analytics = () => {
   const metrics = data.performanceMetrics || defaultData.performanceMetrics;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100" dir="rtl">
-      <Navigation />
-      
+    <div className="h-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 overflow-y-auto" dir="rtl">
       <div className="container mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-8">
