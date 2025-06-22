@@ -27,3 +27,33 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Additional ignores for Facebook Reply System
+production-build/
+*.zip
+backups/
+test-*.mjs
+check-*.mjs
+fix-*.mjs
+system-health-check.mjs
+build-for-production.sh
+hostinger-config.js
+facebook-reply-hostinger.zip
+
+# OS generated files
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary folders
+tmp/
+temp/
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock

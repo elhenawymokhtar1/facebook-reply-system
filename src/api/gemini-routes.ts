@@ -19,8 +19,9 @@ router.get('/test', (req, res) => {
 
 // Gemini message processing endpoint (enhanced)
 router.post('/process', async (req, res) => {
-  console.log('🤖 [GEMINI] PROCESS ENDPOINT HIT!');
+  console.log('🤖🤖🤖 [GEMINI] PROCESS ENDPOINT HIT! 🤖🤖🤖');
   console.log('📝 [GEMINI] Body:', JSON.stringify(req.body, null, 2));
+  console.log('🕒 [GEMINI] Timestamp:', new Date().toISOString());
 
   try {
     const { senderId, messageText, pageId, conversationId: customConversationId } = req.body;
@@ -36,12 +37,18 @@ router.post('/process', async (req, res) => {
     const conversationId = customConversationId || `temp_${senderId}_${pageId}`;
     console.log('🆔 [GEMINI] Using conversation ID:', conversationId);
 
-    console.log('🚀 Processing message with simple processor...');
+    console.log('🚀🚀🚀 Processing message with simple processor...');
+    console.log(`📨 Message: "${messageText}"`);
+    console.log(`👤 Sender: ${senderId}`);
+    console.log(`💬 Conversation: ${conversationId}`);
+
     const success = await SimpleGeminiService.processMessage(
       messageText,
       conversationId,
       senderId
     );
+
+    console.log(`✅ SimpleGeminiService result: ${success}`);
 
     res.json({
       success: success,

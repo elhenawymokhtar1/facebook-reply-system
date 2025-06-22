@@ -82,6 +82,15 @@ export class SimpleGeminiService {
 
       console.log(`🤖 [SIMPLE GEMINI] Processing: "${userMessage}"`);
 
+      // كتابة لوج مفصل لملف
+      try {
+        const fs = await import('fs');
+        const logEntry = `\n${new Date().toISOString()} - Processing message: "${userMessage}" for conversation: ${conversationId}\n`;
+        fs.appendFileSync('gemini-debug.log', logEntry);
+      } catch (err) {
+        console.error('Error writing to debug log:', err);
+      }
+
       // حفظ رسالة المستخدم أولاً (للمحادثات المؤقتة والاختبار)
       if (conversationId.startsWith('temp_') || conversationId.startsWith('test-')) {
         console.log(`💾 [SIMPLE GEMINI] Saving user message to test_messages with conversation_id: "${conversationId}"`);
@@ -96,8 +105,21 @@ export class SimpleGeminiService {
       const settings = await this.getGeminiSettings();
       if (!settings || !settings.is_enabled) {
         console.log('❌ Gemini AI is not enabled');
+
+        // كتابة لوج
+        try {
+          const fs = await import('fs');
+          fs.appendFileSync('gemini-debug.log', `${new Date().toISOString()} - Gemini disabled or no settings\n`);
+        } catch (err) {}
+
         return false;
       }
+
+      // كتابة لوج
+      try {
+        const fs = await import('fs');
+        fs.appendFileSync('gemini-debug.log', `${new Date().toISOString()} - Gemini settings loaded successfully\n`);
+      } catch (err) {}
 
       // إنتاج الرد الذكي
       const response = await this.generateSmartResponse(userMessage, conversationId, settings);
@@ -110,7 +132,18 @@ export class SimpleGeminiService {
       console.log(`📝 [SIMPLE GEMINI] Text response only: "${response}"`);
 
       // تنظيف الرد ومعالجة الأوامر وإرساله
+      console.log(`🔍 [SIMPLE GEMINI] Raw response before cleaning: "${response}"`);
+      console.log(`🔍 [SIMPLE GEMINI] Checking for SEND_IMAGE commands in response...`);
+
+      // فحص مباشر لأوامر الصور
+      const imageCommandRegex = /\[SEND_IMAGE:\s*([^\]]+)\]/gi;
+      const imageMatches = [...response.matchAll(imageCommandRegex)];
+      console.log(`🔍 [SIMPLE GEMINI] Found ${imageMatches.length} SEND_IMAGE commands:`, imageMatches.map(m => m[0]));
+
+      // إزالة منطق الكلمات المفتاحية - الاعتماد على Gemini فقط
+
       const cleanResponse = await this.cleanResponse(response, conversationId);
+      console.log(`🧹 [SIMPLE GEMINI] Clean response after processing: "${cleanResponse}"`);
       const sent = await this.sendResponse(conversationId, senderId, cleanResponse);
 
       console.log(`✅ [SIMPLE GEMINI] Message processed successfully`);
@@ -169,7 +202,7 @@ export class SimpleGeminiService {
    * بناء البرومت الهجين الذكي - النظام الجديد (مؤقت مع البرومت الموجود)
    */
   private static async buildHybridPrompt(userMessage: string, conversationId: string, settings: any): Promise<string> {
-    // البرومت الأساسي - استخدام البرومت الموجود مؤقتاً
+    // البرومت الأساسي - استخدام personality_prompt الذي يحتوي على قواعد الصور
     const basePrompt = settings.personality_prompt || settings.prompt_template || 'أنت مساعد ودود لمتجر سوان شوب.';
 
     // فحص إذا كان السؤال متعلق بالمنتجات
@@ -181,20 +214,25 @@ export class SimpleGeminiService {
     if (isProductRelated) {
       console.log('🛍️ [HYBRID] Product-related question detected, adding products info');
 
-      // إضافة قواعد المنتجات (إذا كانت موجودة، وإلا استخدم قواعد افتراضية)
-      const productsRules = settings.products_prompt || `
-🛒 قواعد المنتجات:
-- اعرضي المنتجات المتوفرة مع الأسعار
-- اذكري المخزون المتوفر
-- للشراء: [ADD_TO_CART: اسم المنتج]
-- المتجر: /shop | السلة: /cart
-- واتساب: 01032792040`;
-
-      prompt += `\n\n${productsRules}`;
+      // إضافة قواعد إرسال الصور من products_prompt
+      console.log(`🔍 [HYBRID] Checking products_prompt:`, settings.products_prompt ? 'EXISTS' : 'NULL');
+      if (settings.products_prompt) {
+        prompt += `\n\n${settings.products_prompt}`;
+        console.log(`✅ [HYBRID] Added products_prompt with image rules`);
+      } else {
+        console.log(`⚠️ [HYBRID] No products_prompt found, using personality_prompt only`);
+        console.log(`🔍 [HYBRID] Settings object:`, JSON.stringify(settings, null, 2));
+      }
 
       // إضافة المنتجات الفعلية من قاعدة البيانات مع ذكاء في الاختيار
       const productsInfo = await this.getBasicProductsInfo(userMessage);
       prompt += `\n\nالمنتجات المتوفرة حالياً:\n${productsInfo}`;
+
+      // إضافة معلومات تفصيلية للمنتجات المطلوبة
+      const specificProductInfo = await this.getRelevantProductInfo(userMessage);
+      if (specificProductInfo) {
+        prompt += `\n\nمعلومات تفصيلية:\n${specificProductInfo}`;
+      }
     } else {
       console.log('💬 [HYBRID] General question, using base prompt only');
     }
@@ -261,8 +299,16 @@ export class SimpleGeminiService {
     const estimatedTokens = Math.ceil(prompt.length / 4);
     console.log(`📊 [HYBRID] Estimated tokens: ${estimatedTokens}, Product-related: ${isProductRelated}`);
 
+    // طباعة الـ prompt الكامل للتحقق من قواعد الصور
+    console.log(`🔍 [HYBRID] Full prompt being sent to Gemini:`);
+    console.log(`=====================================`);
+    console.log(prompt);
+    console.log(`=====================================`);
+
     return prompt;
   }
+
+
 
   /**
    * فحص إذا كان السؤال متعلق بالمنتجات
@@ -508,6 +554,533 @@ export class SimpleGeminiService {
   }
 
   /**
+   * جلب معلومات المنتجات ذات الصلة بالرسالة
+   */
+  private static async getRelevantProductInfo(userMessage: string): Promise<string> {
+    try {
+      // البحث عن أسماء المنتجات في الرسالة
+      const productKeywords = ['حذاء كاجوال جلد طبيعي', 'حذاء كاجوال', 'كاجوال', 'جلد طبيعي'];
+
+      for (const keyword of productKeywords) {
+        if (userMessage.includes(keyword)) {
+          console.log(`🔍 [GEMINI] وجدت منتج مطلوب: ${keyword}`);
+          const productInfo = await this.getProductInfo(keyword);
+          if (productInfo) {
+            return productInfo;
+          }
+        }
+      }
+
+      return '';
+    } catch (error) {
+      console.error('❌ [GEMINI] خطأ في جلب معلومات المنتجات ذات الصلة:', error);
+      return '';
+    }
+  }
+
+  /**
+   * جلب معلومات المنتج الديناميكية من قاعدة البيانات
+   */
+  private static async getProductInfo(productName: string): Promise<string> {
+    try {
+      console.log(`🔍 [GEMINI] جلب معلومات المنتج: "${productName}"`);
+
+      // البحث عن المنتج
+      const { data: product, error: productError } = await supabase
+        .from('ecommerce_products')
+        .select('id, name, description, price, category')
+        .ilike('name', `%${productName}%`)
+        .single();
+
+      if (productError || !product) {
+        console.log(`⚠️ [GEMINI] لم يتم العثور على المنتج: ${productName}`);
+        return '';
+      }
+
+      // جلب الألوان والمقاسات المتاحة فعلياً
+      const { data: variants, error: variantsError } = await supabase
+        .from('product_variants')
+        .select('color, size, price')
+        .eq('product_id', product.id);
+
+      if (variantsError || !variants || variants.length === 0) {
+        console.log(`⚠️ [GEMINI] لا توجد متغيرات في جدول product_variants للمنتج: ${productName}`);
+        console.log(`🔍 [GEMINI] محاولة استخراج المعلومات من وصف المنتج...`);
+
+        // محاولة استخراج المعلومات من وصف المنتج
+        const description = product.description || '';
+
+        // استخراج الألوان من الوصف
+        const colorsMatch = description.match(/متوفر بالألوان:\s*([^📏\n]+)/);
+        const sizesMatch = description.match(/متوفر بالمقاسات:\s*([^\n]+)/);
+
+        let dynamicInfo = `${product.name}\n${description}\n\n`;
+
+        if (colorsMatch) {
+          const colors = colorsMatch[1].split(',').map(c => c.trim()).filter(c => c);
+          dynamicInfo += `🎨 الألوان المتاحة: ${colors.join(', ')}\n`;
+          console.log(`✅ [GEMINI] استخرجت ${colors.length} لون من الوصف: ${colors.join(', ')}`);
+        }
+
+        if (sizesMatch) {
+          const sizes = sizesMatch[1].split(',').map(s => s.trim()).filter(s => s);
+          dynamicInfo += `📏 المقاسات المتاحة: ${sizes.join(', ')}\n`;
+          console.log(`✅ [GEMINI] استخرجت ${sizes.length} مقاس من الوصف: ${sizes.join(', ')}`);
+        }
+
+        dynamicInfo += `💰 السعر: ${product.price} جنيه\n`;
+
+        console.log(`✅ [GEMINI] تم بناء معلومات المنتج من الوصف`);
+        return dynamicInfo;
+      }
+
+      // استخراج الألوان والمقاسات الفريدة
+      const uniqueColors = [...new Set(variants.map(v => v.color))];
+      const uniqueSizes = [...new Set(variants.map(v => v.size))].sort((a, b) => parseInt(a) - parseInt(b));
+      const prices = [...new Set(variants.map(v => v.price))];
+
+      // بناء معلومات ديناميكية
+      let dynamicInfo = `${product.name}\n`;
+      dynamicInfo += `${product.description}\n\n`;
+      dynamicInfo += `🎨 الألوان المتاحة: ${uniqueColors.join(', ')}\n`;
+      dynamicInfo += `📏 المقاسات المتاحة: ${uniqueSizes.join(', ')}\n`;
+
+      if (prices.length === 1) {
+        dynamicInfo += `💰 السعر: ${prices[0]} جنيه\n`;
+      } else {
+        dynamicInfo += `💰 الأسعار: من ${Math.min(...prices)} إلى ${Math.max(...prices)} جنيه\n`;
+      }
+
+      console.log(`✅ [GEMINI] تم جلب معلومات المنتج بنجاح`);
+      return dynamicInfo;
+
+    } catch (error) {
+      console.error('❌ [GEMINI] خطأ في جلب معلومات المنتج:', error);
+      return '';
+    }
+  }
+
+  /**
+   * البحث عن صور المنتجات في قاعدة البيانات
+   */
+  private static async findProductImages(searchQuery: string): Promise<string[]> {
+    try {
+      console.log(`🔍 [GEMINI] البحث عن صور المنتجات: "${searchQuery}"`);
+
+      // أولاً: تحديد المنتج المطلوب - بحث مبسط ومباشر
+      let targetProduct = null;
+
+      // البحث الذكي حسب الكلمات المفتاحية
+      console.log(`🔍 [GEMINI] البحث الذكي في المنتجات المتوفرة...`);
+
+      const { data: allProducts, error: searchError } = await supabase
+        .from('ecommerce_products')
+        .select('id, name, category')
+        .limit(10);
+
+      if (!searchError && allProducts && allProducts.length > 0) {
+        console.log(`📦 [GEMINI] المنتجات المتوفرة:`, allProducts.map(p => p.name));
+
+        // البحث الذكي بالكلمات المفتاحية مع نظام نقاط
+        const searchTerms = searchQuery.toLowerCase();
+        let bestMatch = null;
+        let bestScore = 0;
+
+        console.log(`🔍 [GEMINI] البحث عن: "${searchTerms}"`);
+
+        for (const product of allProducts) {
+          const productText = `${product.name} ${product.category}`.toLowerCase();
+          let score = 0;
+
+          // نقاط التطابق المباشر
+          if (productText.includes(searchTerms)) {
+            score += 100; // تطابق كامل
+          }
+
+          // نقاط الكلمات المفتاحية الرئيسية
+          if (searchTerms.includes('حذاء') && productText.includes('حذاء')) {
+            score += 50;
+          }
+          if (searchTerms.includes('فستان') && productText.includes('فستان')) {
+            score += 50;
+          }
+          if (searchTerms.includes('حقيبة') && productText.includes('حقيبة')) {
+            score += 50;
+          }
+          if (searchTerms.includes('تيشيرت') && productText.includes('تيشيرت')) {
+            score += 50;
+          }
+          if (searchTerms.includes('كوتشي') && productText.includes('كوتشي')) {
+            score += 50;
+          }
+
+          // نقاط الألوان
+          const colors = ['أحمر', 'أسود', 'أبيض', 'أزرق', 'أخضر', 'بني', 'رمادي', 'بيج'];
+          colors.forEach(color => {
+            if (searchTerms.includes(color) && productText.includes(color)) {
+              score += 30;
+            }
+          });
+
+          // نقاط الفئات
+          if (searchTerms.includes('رياضي') && productText.includes('رياضي')) {
+            score += 25;
+          }
+          if (searchTerms.includes('كاجوال') && productText.includes('كاجوال')) {
+            score += 25;
+          }
+          if (searchTerms.includes('كلاسيكي') && productText.includes('كلاسيكي')) {
+            score += 25;
+          }
+
+          console.log(`📊 [GEMINI] ${product.name}: ${score} نقطة`);
+
+          if (score > bestScore) {
+            bestScore = score;
+            bestMatch = product;
+          }
+        }
+
+        if (bestMatch && bestScore > 0) {
+          targetProduct = bestMatch;
+          console.log(`🎯 [GEMINI] أفضل تطابق: ${bestMatch.name} (${bestScore} نقطة)`);
+        }
+      }
+
+      // إذا لم نجد، جرب البحث العام
+      if (!targetProduct) {
+        console.log(`🔍 [GEMINI] البحث العام في جميع المنتجات...`);
+
+        const { data: products, error } = await supabase
+          .from('ecommerce_products')
+          .select('id, name')
+          .limit(5);
+
+        console.log(`🔍 [GEMINI] جميع المنتجات المتوفرة:`, products);
+
+        if (!error && products && products.length > 0) {
+          // خذ أول منتج متوفر
+          targetProduct = products[0];
+          console.log(`✅ [GEMINI] استخدام أول منتج متوفر: ${targetProduct.name}`);
+        }
+      }
+
+
+
+      // ثانياً: جلب صور المنتج المحدد
+      let variants = [];
+      let variantsError = null;
+
+      if (targetProduct) {
+        console.log(`🎯 [GEMINI] جلب صور المنتج المحدد: ${targetProduct.name}`);
+
+        // جلب جميع متغيرات هذا المنتج فقط
+        const { data: productVariants, error: productError } = await supabase
+          .from('product_variants')
+          .select('image_url, color, size, sku')
+          .eq('product_id', targetProduct.id)
+          .not('image_url', 'is', null)
+          .order('color, size');
+
+        console.log(`🔍 [GEMINI] نتيجة البحث في product_variants:`, {
+          productVariants,
+          productError,
+          productId: targetProduct.id
+        });
+
+        if (productVariants && productVariants.length > 0) {
+          variants = productVariants;
+
+          const uniqueColors = [...new Set(variants.map(v => v.color))];
+          console.log(`✅ [GEMINI] وجدت ${variants.length} متغير للمنتج "${targetProduct.name}"`);
+          console.log(`🎨 [GEMINI] الألوان المتوفرة: ${uniqueColors.join(', ')}`);
+
+          // تصفية حسب اللون المطلوب
+          const searchLower = searchQuery.toLowerCase();
+          const colorKeywords = ['أحمر', 'أسود', 'أبيض', 'بني', 'أزرق', 'أزرق داكن', 'أخضر', 'رمادي', 'بيج', 'وردي', 'بنفسجي'];
+          const foundColors = colorKeywords.filter(color => searchLower.includes(color.toLowerCase()));
+
+          if (foundColors.length > 0) {
+            console.log(`🎨 [GEMINI] تصفية حسب الألوان المطلوبة: ${foundColors.join(', ')}`);
+
+            const filteredVariants = variants.filter(variant => {
+              const variantColor = variant.color.toLowerCase();
+              return foundColors.some(color =>
+                variantColor.includes(color.toLowerCase()) ||
+                color.toLowerCase().includes(variantColor)
+              );
+            });
+
+            if (filteredVariants.length > 0) {
+              variants = filteredVariants;
+              console.log(`✅ [GEMINI] بعد التصفية: ${variants.length} متغير`);
+            } else {
+              console.log(`⚠️ [GEMINI] لا توجد متغيرات بالألوان المطلوبة`);
+              console.log(`🎨 [GEMINI] الألوان المتوفرة: ${uniqueColors.join(', ')}`);
+              console.log(`💡 [GEMINI] سأستخدم صورة المنتج الأساسية بدلاً من ذلك`);
+
+              // استخدم صورة المنتج الأساسية إذا لم توجد ألوان مطابقة
+              const { data: productData, error: productImageError } = await supabase
+                .from('ecommerce_products')
+                .select('image_url, name')
+                .eq('id', targetProduct.id)
+                .single();
+
+              if (!productImageError && productData?.image_url) {
+                variants = [{
+                  image_url: productData.image_url,
+                  color: 'الأساسي',
+                  size: '',
+                  sku: 'main-product'
+                }];
+                console.log(`✅ [GEMINI] استخدام صورة المنتج الأساسية`);
+              } else {
+                // إذا لم توجد صورة أساسية، استخدم أول متغير متوفر
+                variants = variants.slice(0, 1);
+                console.log(`⚠️ [GEMINI] استخدام أول متغير متوفر`);
+              }
+            }
+          } else {
+            console.log(`🎨 [GEMINI] لم يتم تحديد لون معين، سأعرض أفضل 3 متغيرات`);
+            // أخذ أول 3 متغيرات فقط لتجنب الإرسال المفرط
+            variants = variants.slice(0, 3);
+          }
+        } else {
+          console.log(`⚠️ [GEMINI] لا توجد متغيرات للمنتج "${targetProduct.name}" - استخدم صورة المنتج الأساسية`);
+
+          // جلب صورة المنتج الأساسية
+          const { data: productData, error: productImageError } = await supabase
+            .from('ecommerce_products')
+            .select('image_url, name')
+            .eq('id', targetProduct.id)
+            .single();
+
+          if (!productImageError && productData?.image_url) {
+            console.log(`✅ [GEMINI] وجدت صورة المنتج الأساسية: ${productData.name}`);
+            variants = [{
+              image_url: productData.image_url,
+              color: 'الأساسي',
+              size: '',
+              sku: 'main-product'
+            }];
+          } else {
+            // جرب البحث العام في جميع المتغيرات
+            const { data: allVariants, error: allError } = await supabase
+              .from('product_variants')
+              .select('image_url, color, size, sku')
+              .not('image_url', 'is', null)
+              .limit(6);
+
+            console.log(`🔍 [GEMINI] البحث العام في جميع المتغيرات:`, { allVariants, allError });
+
+            if (allVariants && allVariants.length > 0) {
+              variants = allVariants;
+              console.log(`✅ [GEMINI] البحث العام - وجدت ${variants.length} صورة`);
+            }
+          }
+        }
+
+        variantsError = productError;
+      } else {
+        console.log(`❌ [GEMINI] لم أجد أي منتج - البحث العام في جميع الصور`);
+
+        // البحث العام في جميع الصور
+        const { data: allVariants, error: allError } = await supabase
+          .from('product_variants')
+          .select('image_url, color, size, sku')
+          .not('image_url', 'is', null)
+          .limit(6);
+
+        console.log(`🔍 [GEMINI] البحث العام النهائي:`, { allVariants, allError });
+
+        variants = allVariants || [];
+        variantsError = allError;
+        console.log(`✅ [GEMINI] البحث العام النهائي - وجدت ${variants.length} صورة`);
+      }
+
+      if (variantsError) {
+        console.error('❌ [GEMINI] خطأ في البحث في جدول product_variants:', variantsError);
+      }
+
+      // جمع جميع الصور وإزالة المكررات
+      const imageUrls: string[] = [];
+      const seenUrls = new Set<string>();
+
+      // إضافة صور المتغيرات
+      if (variants && variants.length > 0) {
+        variants.forEach(variant => {
+          if (variant.image_url && !seenUrls.has(variant.image_url)) {
+            imageUrls.push(variant.image_url);
+            seenUrls.add(variant.image_url);
+            console.log(`📸 [GEMINI] وجدت صورة متغير: ${variant.color} ${variant.size}`);
+          }
+        });
+      }
+
+      // تحديد عدد الصور المرسلة (حد أقصى 3 صور)
+      const limitedImages = imageUrls.slice(0, 3);
+
+      console.log(`✅ [GEMINI] تم العثور على ${imageUrls.length} صورة`);
+      console.log(`📤 [GEMINI] سيتم إرسال: ${limitedImages.length} صورة`);
+
+      return limitedImages;
+
+    } catch (error) {
+      console.error('❌ [GEMINI] خطأ في البحث عن الصور:', error);
+      return [];
+    }
+  }
+
+  /**
+   * إرسال صور المنتجات للعميل
+   */
+  private static async sendProductImages(conversationId: string, imageUrls: string[], productName: string): Promise<boolean> {
+    try {
+      console.log(`📤 [GEMINI] إرسال ${imageUrls.length} صورة للمحادثة: ${conversationId}`);
+
+      // فحص إذا كانت محادثة تجريبية
+      if (conversationId.startsWith('temp_') || conversationId.startsWith('test-')) {
+        console.log(`🧪 [GEMINI] محادثة تجريبية - حفظ الصور في test_messages`);
+
+        // حفظ الصور كرسائل منفصلة في test_messages
+        let successCount = 0;
+        for (const imageUrl of imageUrls) {
+          try {
+            await supabase.from('test_messages').insert({
+              conversation_id: conversationId,
+              content: `📸 صورة ${productName}: ${imageUrl}`,
+              sender_type: 'bot'
+            });
+            successCount++;
+            console.log(`✅ [GEMINI] تم حفظ صورة في test_messages`);
+          } catch (error) {
+            console.error('❌ [GEMINI] خطأ في حفظ صورة:', error);
+          }
+        }
+
+        console.log(`📊 [GEMINI] تم حفظ ${successCount}/${imageUrls.length} صورة في test_messages`);
+        return successCount > 0;
+      }
+
+      // للمحادثات الحقيقية - الكود الأصلي
+      const { data: conversation, error: convError } = await supabase
+        .from('conversations')
+        .select('customer_facebook_id, facebook_page_id, customer_name')
+        .eq('id', conversationId)
+        .single();
+
+      if (convError || !conversation) {
+        console.error('❌ [GEMINI] خطأ في جلب معلومات المحادثة:', convError);
+        return false;
+      }
+
+      // الحصول على إعدادات Facebook
+      const { data: facebookSettings, error: fbError } = await supabase
+        .from('facebook_settings')
+        .select('access_token')
+        .eq('page_id', conversation.facebook_page_id)
+        .single();
+
+      if (fbError || !facebookSettings) {
+        console.error('❌ [GEMINI] خطأ في جلب إعدادات Facebook:', fbError);
+        return false;
+      }
+
+      // إرسال كل صورة عبر Facebook
+      let successCount = 0;
+      for (const imageUrl of imageUrls) {
+        try {
+          console.log(`📸 [GEMINI] إرسال صورة: ${imageUrl.substring(0, 50)}...`);
+
+          const response = await fetch('/api/facebook/send-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              access_token: facebookSettings.access_token,
+              recipient_id: conversation.customer_facebook_id,
+              image_url: imageUrl
+            })
+          });
+
+          if (response.ok) {
+            successCount++;
+            console.log(`✅ [GEMINI] تم إرسال الصورة بنجاح`);
+          } else {
+            console.error(`❌ [GEMINI] فشل في إرسال الصورة:`, response.status);
+          }
+
+          // تأخير قصير بين الصور لتجنب Rate Limiting
+          await new Promise(resolve => setTimeout(resolve, 500));
+
+        } catch (error) {
+          console.error('❌ [GEMINI] خطأ في إرسال صورة واحدة:', error);
+        }
+      }
+
+      console.log(`📊 [GEMINI] تم إرسال ${successCount}/${imageUrls.length} صورة بنجاح`);
+      return successCount > 0;
+
+    } catch (error) {
+      console.error('❌ [GEMINI] خطأ في إرسال الصور:', error);
+      return false;
+    }
+  }
+
+  /**
+   * معالجة أوامر إرسال الصور
+   */
+  private static async processImageCommands(response: string, conversationId: string): Promise<string> {
+    try {
+      console.log(`🔍 [GEMINI] Processing image commands in response: "${response.substring(0, 200)}..."`);
+
+      // البحث عن أوامر إرسال الصور
+      const imageCommandRegex = /\[SEND_IMAGE:\s*([^\]]+)\]/gi;
+      const matches = [...response.matchAll(imageCommandRegex)];
+
+      console.log(`🔍 [GEMINI] Found ${matches.length} image command matches`);
+
+      if (matches.length === 0) {
+        console.log(`⚠️ [GEMINI] No image commands found in response`);
+        return response;
+      }
+
+      console.log(`📸 [GEMINI] وجدت ${matches.length} أمر إرسال صورة`);
+
+      for (const match of matches) {
+        const fullCommand = match[0];
+        const searchQuery = match[1].trim();
+
+        console.log(`🔍 [GEMINI] معالجة أمر: ${fullCommand}`);
+
+        // البحث عن الصور
+        const imageUrls = await this.findProductImages(searchQuery);
+
+        if (imageUrls.length > 0) {
+          // إرسال الصور
+          const success = await this.sendProductImages(conversationId, imageUrls, searchQuery);
+
+          if (success) {
+            // استبدال الأمر برسالة نجاح
+            response = response.replace(fullCommand, `✅ تم إرسال صور ${searchQuery}`);
+          } else {
+            // استبدال الأمر برسالة فشل
+            response = response.replace(fullCommand, `❌ فشل في إرسال صور ${searchQuery}`);
+          }
+        } else {
+          // لا توجد صور
+          response = response.replace(fullCommand, `⚠️ لا توجد صور متاحة لـ ${searchQuery}`);
+        }
+      }
+
+      return response;
+
+    } catch (error) {
+      console.error('❌ [GEMINI] خطأ في معالجة أوامر الصور:', error);
+      return response.replace(/\[SEND_IMAGE:[^\]]*\]/gi, '❌ خطأ في إرسال الصورة');
+    }
+  }
+
+  /**
    * تنظيف الرد من الإشارات التقنية ومعالجة الأوامر
    */
   private static async cleanResponse(response: string, conversationId: string): Promise<string> {
@@ -517,8 +1090,10 @@ export class SimpleGeminiService {
     // معالجة أوامر الطلب المباشر
     response = await this.processDirectOrderCommands(response, conversationId);
 
+    // معالجة أوامر إرسال الصور
+    response = await this.processImageCommands(response, conversationId);
+
     return response
-      .replace(/\[SEND_IMAGE:[^\]]*\]/gi, '')
       .replace(/\n\s*\n\s*\n/g, '\n\n')
       .trim();
   }
@@ -1090,6 +1665,23 @@ export class SimpleGeminiService {
         }
         info += `📦 ${defaultProduct.stock_quantity > 0 ?
           `متوفر (${defaultProduct.stock_quantity} قطعة)` : 'نفد المخزون'}\n`;
+
+        // استخراج الألوان والمقاسات من الوصف
+        const description = defaultProduct.description || '';
+        const colorsMatch = description.match(/متوفر بالألوان:\s*([^📏\n]+)/);
+        const sizesMatch = description.match(/متوفر بالمقاسات:\s*([^\n]+)/);
+
+        if (colorsMatch) {
+          const colors = colorsMatch[1].split(',').map(c => c.trim()).filter(c => c);
+          info += `🎨 الألوان المتاحة: ${colors.join(', ')}\n`;
+          console.log(`✅ [DEFAULT PRODUCT] استخرجت ${colors.length} لون: ${colors.join(', ')}`);
+        }
+
+        if (sizesMatch) {
+          const sizes = sizesMatch[1].split(',').map(s => s.trim()).filter(s => s);
+          info += `📏 المقاسات المتاحة: ${sizes.join(', ')}\n`;
+          console.log(`✅ [DEFAULT PRODUCT] استخرجت ${sizes.length} مقاس: ${sizes.join(', ')}`);
+        }
 
         if (defaultProduct.short_description) {
           info += `\n📝 ${defaultProduct.short_description}\n`;

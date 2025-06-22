@@ -31,6 +31,23 @@ export async function processIncomingMessage(
 ): Promise<ProcessMessageResponse> {
   const { senderId, messageText, messageId, pageId, timestamp, imageUrl, senderType = 'customer', isEcho = false } = request;
 
+  // إصلاح ترميز النص العربي
+  let fixedMessageText = messageText;
+  try {
+    // محاولة إصلاح الترميز إذا كان مُشوه
+    if (messageText && messageText.includes('?')) {
+      // تجربة فك الترميز
+      const buffer = Buffer.from(messageText, 'latin1');
+      const decodedText = buffer.toString('utf8');
+      if (decodedText && !decodedText.includes('?')) {
+        fixedMessageText = decodedText;
+        console.log(`🔧 Fixed encoding: "${messageText}" → "${fixedMessageText}"`);
+      }
+    }
+  } catch (error) {
+    console.log('⚠️ Could not fix encoding, using original text');
+  }
+
   try {
     const messageTypeLabel = senderType === 'page' ? 'page admin' : 'customer';
     console.log(`📨 Processing message from ${messageTypeLabel} ${senderId}: "${messageText}"`);
@@ -49,7 +66,7 @@ export async function processIncomingMessage(
 
     // حفظ الرسالة الواردة (تجاهل المكررة)
     try {
-      await saveIncomingMessage(conversationId, messageText, messageId, timestamp, imageUrl, senderType, pageId);
+      await saveIncomingMessage(conversationId, fixedMessageText, messageId, timestamp, imageUrl, senderType, pageId);
     } catch (error: any) {
       if (error.code === '23505') {
         console.log('⚠️ Duplicate message ignored:', messageId);
@@ -68,7 +85,7 @@ export async function processIncomingMessage(
     if (senderType === 'customer' && !isEcho) {
       console.log('🚀 Starting smart auto reply processing...');
       autoReplyWasSent = await SimpleGeminiService.processMessage(
-        messageText,
+        fixedMessageText,
         conversationId,
         senderId,
         pageId
@@ -79,7 +96,7 @@ export async function processIncomingMessage(
     }
 
     // تحديث المحادثة
-    await updateConversation(conversationId, messageText, senderType);
+    await updateConversation(conversationId, fixedMessageText, senderType);
 
     console.log(`✅ Message processed successfully for conversation: ${conversationId}`);
 

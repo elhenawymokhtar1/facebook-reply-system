@@ -24,9 +24,10 @@ interface Message {
 const SimpleTestChat = () => {
   const { toast } = useToast();
   
-  // محادثة اختبار ثابتة
-  const TEST_CONVERSATION_ID = 'test-conversation-fixed';
+  // محادثة اختبار ثابتة - استخدام ID ثابت للاختبار
+  const TEST_CONVERSATION_ID = 'test-conversation-main';
   const TEST_CUSTOMER_NAME = 'عميل تجريبي';
+  const [currentConversationId, setCurrentConversationId] = useState(TEST_CONVERSATION_ID);
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -36,14 +37,38 @@ const SimpleTestChat = () => {
   // تحميل الرسائل
   const loadMessages = async () => {
     try {
-      const { data, error } = await supabase
+      // البحث في test_messages أولاً، ثم في messages إذا لم توجد
+      let { data: testData, error: testError } = await supabase
         .from('test_messages')
         .select('*')
-        .eq('conversation_id', TEST_CONVERSATION_ID)
+        .eq('conversation_id', currentConversationId)
         .order('created_at', { ascending: true });
 
-      if (error) throw error;
-      setMessages(data || []);
+      if (testError) {
+        console.error('Error loading from test_messages:', testError);
+        testData = [];
+      }
+
+      // إذا لم توجد رسائل في test_messages، جرب messages
+      if (!testData || testData.length === 0) {
+        const { data: messagesData, error: messagesError } = await supabase
+          .from('messages')
+          .select('*')
+          .eq('conversation_id', currentConversationId)
+          .order('created_at', { ascending: true });
+
+        if (!messagesError && messagesData) {
+          // تحويل تنسيق messages إلى test_messages
+          const convertedData = messagesData.map(msg => ({
+            ...msg,
+            sender_type: msg.sender_type === 'customer' ? 'user' : 'bot'
+          }));
+          setMessages(convertedData);
+          return;
+        }
+      }
+
+      setMessages(testData || []);
     } catch (error) {
       console.error('Error loading messages:', error);
       toast({
@@ -57,13 +82,18 @@ const SimpleTestChat = () => {
   // مسح المحادثة (الرسائل فقط)
   const clearChat = async () => {
     try {
-      const { error } = await supabase
+      // مسح من test_messages
+      await supabase
         .from('test_messages')
         .delete()
-        .eq('conversation_id', TEST_CONVERSATION_ID);
+        .eq('conversation_id', currentConversationId);
 
-      if (error) throw error;
-      
+      // مسح من messages أيضاً
+      await supabase
+        .from('messages')
+        .delete()
+        .eq('conversation_id', currentConversationId);
+
       setMessages([]);
       toast({
         title: "تم المسح",
@@ -85,11 +115,11 @@ const SimpleTestChat = () => {
 
     setIsLoading(true);
     try {
-      // حفظ رسالة المستخدم
+      // حفظ رسالة المستخدم أولاً
       const { error } = await supabase
         .from('test_messages')
         .insert({
-          conversation_id: TEST_CONVERSATION_ID,
+          conversation_id: currentConversationId,
           content: newMessage,
           sender_type: 'user'
         });
@@ -116,18 +146,18 @@ const SimpleTestChat = () => {
     }
   };
 
-  // استخدام نظام Gemini AI مباشرة (نفس الطريقة المستخدمة في TestChat)
+  // استخدام نظام Gemini AI مباشرة (نفس إعدادات المحادثات الحقيقية)
   const simulateAIResponse = async (userMessage: string) => {
     console.log('🤖 [SIMPLE TEST CHAT] Starting AI response for:', userMessage);
 
     try {
-      // استخدام نظام Gemini AI الحقيقي مباشرة
+      // استخدام نظام Gemini AI الحقيقي مباشرة - نفس إعدادات المحادثات
       const { SimpleGeminiService } = await import('@/services/simpleGeminiService');
 
-      // معالجة الرسالة باستخدام Gemini AI مع conversation ID ثابت
+      // معالجة الرسالة باستخدام Gemini AI مع conversation ID الحالي
       const success = await SimpleGeminiService.processMessage(
         userMessage,
-        TEST_CONVERSATION_ID,
+        currentConversationId,
         'test-user',
         'test-page'
       );
@@ -149,7 +179,7 @@ const SimpleTestChat = () => {
       await supabase
         .from('test_messages')
         .insert({
-          conversation_id: TEST_CONVERSATION_ID,
+          conversation_id: currentConversationId,
           content: errorResponse,
           sender_type: 'bot'
         });
@@ -165,7 +195,7 @@ const SimpleTestChat = () => {
 
   useEffect(() => {
     loadMessages();
-  }, []);
+  }, [currentConversationId]);
 
   useEffect(() => {
     scrollToBottom();
@@ -179,7 +209,7 @@ const SimpleTestChat = () => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">محاكي المحادثات المبسط</h1>
-              <p className="text-gray-600">اختبار نظام Gemini AI مع محادثة ثابتة</p>
+              <p className="text-gray-600">اختبار نظام Gemini AI بنفس إعدادات المحادثات الحقيقية</p>
             </div>
             <div className="flex gap-2">
               <Button onClick={loadMessages} variant="outline" size="sm">
@@ -203,7 +233,7 @@ const SimpleTestChat = () => {
               <MessageCircle className="w-5 h-5" />
               {TEST_CUSTOMER_NAME}
               <span className="text-sm text-gray-500 font-normal">
-                (محادثة اختبار ثابتة)
+                (ID: {currentConversationId.substring(0, 8)}...)
               </span>
             </CardTitle>
           </CardHeader>
@@ -239,7 +269,30 @@ const SimpleTestChat = () => {
                         {message.sender_type === 'user' ? 'أنت' : 'Gemini AI'}
                       </span>
                     </div>
-                    <p className="text-sm">{message.content}</p>
+                    <div className="text-sm">
+                      {/* فحص إذا كانت الرسالة تحتوي على صورة */}
+                      {message.content.startsWith('📸 صورة') && message.content.includes('http') ? (
+                        <div className="space-y-2">
+                          <div>{message.content.split(':')[0]}:</div>
+                          <img
+                            src={message.content.split(': ')[1]}
+                            alt="صورة المنتج"
+                            className="max-w-full h-auto rounded-lg border"
+                            onError={(e) => {
+                              const target = e.currentTarget as HTMLImageElement;
+                              target.style.display = 'none';
+                              const errorDiv = target.nextElementSibling as HTMLElement;
+                              if (errorDiv) errorDiv.style.display = 'block';
+                            }}
+                          />
+                          <div style={{display: 'none'}} className="text-red-500 text-xs">
+                            فشل في تحميل الصورة
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="whitespace-pre-wrap">{message.content}</div>
+                      )}
+                    </div>
                     <p className="text-xs opacity-75 mt-1">
                       {new Date(message.created_at).toLocaleTimeString('ar-EG', {
                         hour: '2-digit',

@@ -325,3 +325,30 @@ npm run dev &
 - **تكامل مثالي** مع Facebook و Gemini AI
 
 **🎉 نظام جاهز للاستخدام الفعلي مع العملاء!**
+
+---
+
+## 🚀 **رفع المشروع على GitHub**
+
+### استنساخ المشروع:
+```bash
+git clone https://github.com/elhenawymokhtar1/facebook-reply-system.git
+cd facebook-reply-system
+npm install
+```
+
+### تشغيل النظام:
+```bash
+# تشغيل الخادم الخلفي
+cd src/api && npx tsx server.ts
+
+# تشغيل الواجهة الأمامية (في terminal آخر)
+npm run dev
+```
+
+### الوصول للنظام:
+- 🌐 **الواجهة الرئيسية:** http://localhost:8080
+- 🧪 **صفحة الاختبار:** http://localhost:8080/simple-test-chat
+- ⚙️ **إعدادات Gemini:** http://localhost:8080/facebook-ai-settings
+
+**⭐ إذا أعجبك المشروع، لا تنس إعطاؤه نجمة على GitHub!**

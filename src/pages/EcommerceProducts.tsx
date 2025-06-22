@@ -6,12 +6,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from '@/integrations/supabase/client';
-import { 
-  Plus, 
-  Edit, 
-  Trash2, 
-  Package, 
-  DollarSign, 
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Package,
+  DollarSign,
   Eye,
   Search,
   Filter,
@@ -21,7 +21,6 @@ import {
 interface Product {
   id: string;
   name: string;
-  slug: string;
   description: string;
   short_description: string;
   sku: string;
@@ -33,15 +32,34 @@ interface Product {
   image_url?: string;
   category: string;
   brand: string;
+  weight?: number;
+  store_id?: string;
   created_at: string;
+}
+
+interface ProductVariant {
+  id: string;
+  product_id: string;
+  color: string;
+  size: string;
+  price: number;
+  stock_quantity: number;
+  sku: string;
+  image_url?: string;
+  is_available: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 const EcommerceProducts = () => {
   const [products, setProducts] = useState<Product[]>([]);
+  const [productVariants, setProductVariants] = useState<{[key: string]: ProductVariant[]}>({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [showVariants, setShowVariants] = useState<{[key: string]: boolean}>({});
   const { toast } = useToast();
 
   // بيانات المنتج الجديد
@@ -79,6 +97,11 @@ const EcommerceProducts = () => {
       }
 
       setProducts(data || []);
+
+      // جلب متغيرات المنتجات
+      if (data && data.length > 0) {
+        await fetchProductVariants(data.map(p => p.id));
+      }
     } catch (error) {
       console.error('Error:', error);
     } finally {
@@ -86,102 +109,202 @@ const EcommerceProducts = () => {
     }
   };
 
-  // إضافة منتج جديد
-  const addProduct = async () => {
+  // جلب متغيرات المنتجات
+  const fetchProductVariants = async (productIds: string[]) => {
     try {
-      if (!newProduct.name || !newProduct.price) {
-        toast({
-          title: "خطأ",
-          description: "يرجى ملء الحقول المطلوبة",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      // إنشاء slug من الاسم
-      const slug = newProduct.name
-        .toLowerCase()
-        .replace(/[^a-z0-9\u0600-\u06FF]/g, '-')
-        .replace(/-+/g, '-')
-        .trim();
-
-      // الحصول على معرف المتجر الافتراضي
-      const { data: stores } = await supabase
-        .from('stores')
-        .select('id')
-        .limit(1);
-
-      if (!stores || stores.length === 0) {
-        toast({
-          title: "خطأ",
-          description: "لا يوجد متجر متاح",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const productData = {
-        store_id: stores[0].id,
-        name: newProduct.name,
-        slug: slug,
-        description: newProduct.description,
-        short_description: newProduct.short_description,
-        sku: newProduct.sku || `SKU-${Date.now()}`,
-        price: parseFloat(newProduct.price),
-        sale_price: newProduct.sale_price ? parseFloat(newProduct.sale_price) : null,
-        stock_quantity: parseInt(newProduct.stock_quantity) || 0,
-        category: newProduct.category,
-        brand: newProduct.brand,
-        image_url: newProduct.image_url,
-        featured: newProduct.featured,
-        status: 'active'
-      };
-
-      const { error } = await supabase
-        .from('ecommerce_products')
-        .insert(productData);
+      const { data, error } = await supabase
+        .from('product_variants')
+        .select('*')
+        .in('product_id', productIds)
+        .order('color, size');
 
       if (error) {
-        console.error('Error adding product:', error);
+        console.error('Error fetching variants:', error);
+        return;
+      }
+
+      // تجميع المتغيرات حسب معرف المنتج
+      const variantsByProduct: {[key: string]: ProductVariant[]} = {};
+      data?.forEach(variant => {
+        if (!variantsByProduct[variant.product_id]) {
+          variantsByProduct[variant.product_id] = [];
+        }
+        variantsByProduct[variant.product_id].push(variant);
+      });
+
+      setProductVariants(variantsByProduct);
+    } catch (error) {
+      console.error('Error fetching variants:', error);
+    }
+  };
+
+  // إضافة أو تحديث منتج
+  const saveProduct = async () => {
+    try {
+      // التحقق من صحة البيانات
+      if (!newProduct.name?.trim()) {
         toast({
           title: "خطأ",
-          description: "فشل في إضافة المنتج",
+          description: "يرجى إدخال اسم المنتج",
           variant: "destructive",
         });
         return;
       }
 
-      toast({
-        title: "نجح",
-        description: "تم إضافة المنتج بنجاح",
-      });
+      if (!newProduct.price || isNaN(parseFloat(newProduct.price)) || parseFloat(newProduct.price) <= 0) {
+        toast({
+          title: "خطأ",
+          description: "يرجى إدخال سعر صحيح للمنتج",
+          variant: "destructive",
+        });
+        return;
+      }
 
-      // إعادة تعيين النموذج
-      setNewProduct({
-        name: '',
-        description: '',
-        short_description: '',
-        sku: '',
-        price: '',
-        sale_price: '',
-        stock_quantity: '',
-        category: '',
-        brand: '',
-        image_url: '',
-        featured: false
-      });
+      if (newProduct.sale_price && (isNaN(parseFloat(newProduct.sale_price)) || parseFloat(newProduct.sale_price) < 0)) {
+        toast({
+          title: "خطأ",
+          description: "يرجى إدخال سعر تخفيض صحيح",
+          variant: "destructive",
+        });
+        return;
+      }
 
-      setShowAddForm(false);
+      if (editingProduct) {
+        // تحديث منتج موجود
+        const updateData = {
+          name: newProduct.name,
+          description: newProduct.description,
+          short_description: newProduct.short_description,
+          sku: newProduct.sku,
+          price: parseFloat(newProduct.price),
+          sale_price: newProduct.sale_price ? parseFloat(newProduct.sale_price) : null,
+          stock_quantity: newProduct.stock_quantity ? parseInt(newProduct.stock_quantity) : 0,
+          category: newProduct.category,
+          brand: newProduct.brand,
+          image_url: newProduct.image_url,
+          featured: newProduct.featured
+        };
+
+        const { error, data } = await supabase
+          .from('ecommerce_products')
+          .update(updateData)
+          .eq('id', editingProduct.id)
+          .select();
+
+        if (error) {
+          console.error('Error updating product:', error);
+          toast({
+            title: "خطأ",
+            description: `فشل في تحديث المنتج: ${error.message}`,
+            variant: "destructive",
+          });
+          return;
+        }
+        toast({
+          title: "نجح",
+          description: "تم تحديث المنتج بنجاح",
+        });
+      } else {
+        // إضافة منتج جديد
+        const { data: stores } = await supabase
+          .from('stores')
+          .select('id')
+          .limit(1);
+
+        if (!stores || stores.length === 0) {
+          toast({
+            title: "خطأ",
+            description: "لا يوجد متجر متاح",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const productData = {
+          store_id: stores[0].id,
+          name: newProduct.name,
+          description: newProduct.description,
+          short_description: newProduct.short_description,
+          sku: newProduct.sku || `SKU-${Date.now()}`,
+          price: parseFloat(newProduct.price),
+          sale_price: newProduct.sale_price ? parseFloat(newProduct.sale_price) : null,
+          stock_quantity: parseInt(newProduct.stock_quantity) || 0,
+          category: newProduct.category,
+          brand: newProduct.brand,
+          image_url: newProduct.image_url,
+          featured: newProduct.featured,
+          status: 'active'
+        };
+
+        const { error, data } = await supabase
+          .from('ecommerce_products')
+          .insert(productData)
+          .select();
+
+        if (error) {
+          console.error('Error adding product:', error);
+          toast({
+            title: "خطأ",
+            description: `فشل في إضافة المنتج: ${error.message}`,
+            variant: "destructive",
+          });
+          return;
+        }
+        toast({
+          title: "نجح",
+          description: "تم إضافة المنتج بنجاح",
+        });
+      }
+
+      resetForm();
       fetchProducts();
 
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Unexpected error:', error);
       toast({
         title: "خطأ",
-        description: "حدث خطأ غير متوقع",
+        description: `حدث خطأ غير متوقع: ${error instanceof Error ? error.message : 'خطأ غير معروف'}`,
         variant: "destructive",
       });
     }
+  };
+
+  // إعادة تعيين النموذج
+  const resetForm = () => {
+    setNewProduct({
+      name: '',
+      description: '',
+      short_description: '',
+      sku: '',
+      price: '',
+      sale_price: '',
+      stock_quantity: '',
+      category: '',
+      brand: '',
+      image_url: '',
+      featured: false
+    });
+    setShowAddForm(false);
+    setEditingProduct(null);
+  };
+
+  // دالة التعديل
+  const handleEdit = (product: Product) => {
+    setNewProduct({
+      name: product.name,
+      description: product.description || '',
+      short_description: product.short_description || '',
+      sku: product.sku,
+      price: product.price.toString(),
+      sale_price: product.sale_price ? product.sale_price.toString() : '',
+      stock_quantity: product.stock_quantity.toString(),
+      category: product.category || '',
+      brand: product.brand || '',
+      image_url: product.image_url || '',
+      featured: product.featured || false
+    });
+    setEditingProduct(product);
+    setShowAddForm(true);
   };
 
   // حذف منتج
@@ -226,6 +349,14 @@ const EcommerceProducts = () => {
   // الحصول على الفئات الفريدة
   const categories = [...new Set(products.map(p => p.category).filter(Boolean))];
 
+  // تبديل عرض المتغيرات
+  const toggleVariants = (productId: string) => {
+    setShowVariants(prev => ({
+      ...prev,
+      [productId]: !prev[productId]
+    }));
+  };
+
   useEffect(() => {
     fetchProducts();
   }, []);
@@ -249,8 +380,11 @@ const EcommerceProducts = () => {
           <h1 className="text-3xl font-bold text-gray-900">إدارة المنتجات</h1>
           <p className="text-gray-600 mt-2">إدارة منتجات المتجر الإلكتروني</p>
         </div>
-        <Button 
-          onClick={() => setShowAddForm(true)}
+        <Button
+          onClick={() => {
+            resetForm();
+            setShowAddForm(true);
+          }}
           className="bg-gradient-to-r from-blue-600 to-purple-600 text-white"
         >
           <Plus className="w-4 h-4 ml-2" />
@@ -293,7 +427,7 @@ const EcommerceProducts = () => {
               <div className="mr-4">
                 <p className="text-sm font-medium text-gray-600">متوسط السعر</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {products.length > 0 
+                  {products.length > 0
                     ? Math.round(products.reduce((sum, p) => sum + p.price, 0) / products.length)
                     : 0
                   } ج
@@ -308,9 +442,9 @@ const EcommerceProducts = () => {
             <div className="flex items-center">
               <Eye className="w-8 h-8 text-purple-600" />
               <div className="mr-4">
-                <p className="text-sm font-medium text-gray-600">منتجات نشطة</p>
+                <p className="text-sm font-medium text-gray-600">إجمالي المتغيرات</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {products.filter(p => p.status === 'active').length}
+                  {Object.values(productVariants).reduce((total, variants) => total + variants.length, 0)}
                 </p>
               </div>
             </div>
@@ -353,8 +487,10 @@ const EcommerceProducts = () => {
       {showAddForm && (
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>إضافة منتج جديد</CardTitle>
-            <CardDescription>املأ البيانات التالية لإضافة منتج جديد</CardDescription>
+            <CardTitle>{editingProduct ? 'تعديل المنتج' : 'إضافة منتج جديد'}</CardTitle>
+            <CardDescription>
+              {editingProduct ? 'قم بتعديل بيانات المنتج' : 'املأ البيانات التالية لإضافة منتج جديد'}
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -486,12 +622,12 @@ const EcommerceProducts = () => {
             </div>
 
             <div className="flex gap-4 mt-6">
-              <Button onClick={addProduct} className="bg-green-600 hover:bg-green-700">
-                إضافة المنتج
+              <Button onClick={saveProduct} className="bg-green-600 hover:bg-green-700">
+                {editingProduct ? 'تحديث المنتج' : 'إضافة المنتج'}
               </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => setShowAddForm(false)}
+              <Button
+                variant="outline"
+                onClick={resetForm}
               >
                 إلغاء
               </Button>
@@ -548,14 +684,56 @@ const EcommerceProducts = () => {
                 <span>SKU: {product.sku}</span>
               </div>
 
+              {/* عرض المتغيرات إن وجدت */}
+              {productVariants[product.id] && productVariants[product.id].length > 0 && (
+                <div className="mb-4">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-blue-600 hover:text-blue-700 p-0 h-auto"
+                    onClick={() => toggleVariants(product.id)}
+                  >
+                    <Eye className="w-4 h-4 ml-1" />
+                    {showVariants[product.id] ? 'إخفاء' : 'عرض'} المتغيرات ({productVariants[product.id].length})
+                  </Button>
+
+                  {showVariants[product.id] && (
+                    <div className="mt-3 space-y-2">
+                      <div className="text-xs font-medium text-gray-700 mb-2">الألوان والمقاسات المتوفرة:</div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        {productVariants[product.id].map((variant) => (
+                          <div
+                            key={variant.id}
+                            className="flex items-center justify-between p-2 bg-gray-50 rounded"
+                          >
+                            <div>
+                              <span className="font-medium">{variant.color}</span>
+                              <span className="text-gray-500"> - {variant.size}</span>
+                            </div>
+                            <span className={`text-xs ${variant.stock_quantity > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                              {variant.stock_quantity}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex gap-2">
-                <Button size="sm" variant="outline" className="flex-1">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={() => handleEdit(product)}
+                >
                   <Edit className="w-4 h-4 ml-1" />
                   تعديل
                 </Button>
-                <Button 
-                  size="sm" 
-                  variant="outline" 
+                <Button
+                  size="sm"
+                  variant="outline"
                   className="text-red-600 hover:text-red-700"
                   onClick={() => deleteProduct(product.id)}
                 >
@@ -573,13 +751,16 @@ const EcommerceProducts = () => {
             <Package className="w-16 h-16 mx-auto mb-4 text-gray-400" />
             <h3 className="text-lg font-semibold text-gray-900 mb-2">لا توجد منتجات</h3>
             <p className="text-gray-600 mb-4">
-              {searchTerm || selectedCategory !== 'all' 
+              {searchTerm || selectedCategory !== 'all'
                 ? 'لا توجد منتجات تطابق البحث'
                 : 'لم يتم إضافة أي منتجات بعد'
               }
             </p>
             {!searchTerm && selectedCategory === 'all' && (
-              <Button onClick={() => setShowAddForm(true)}>
+              <Button onClick={() => {
+                resetForm();
+                setShowAddForm(true);
+              }}>
                 <Plus className="w-4 h-4 ml-2" />
                 إضافة أول منتج
               </Button>

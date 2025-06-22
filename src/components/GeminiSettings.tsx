@@ -288,6 +288,22 @@ export const GeminiSettings: React.FC = () => {
     toast.success("تم تحديث البرومت بالنظام الذكي الجديد!");
   };
 
+  // دالة إضافة تعليمات الصور للبرومت
+  const addImageInstructions = () => {
+    const imageInstructions = `عندما يطلب العميل رؤية صورة منتج، استخدم الأمر التالي:
+[SEND_IMAGE: وصف المنتج]
+
+مثال:
+- إذا طلب "أريد حذاء أسود" → اكتب: [SEND_IMAGE: حذاء أسود]
+- إذا طلب "عندكم فستان؟" → اكتب: [SEND_IMAGE: فستان]
+- إذا طلب "أريد حقيبة يد" → اكتب: [SEND_IMAGE: حقيبة يد]
+
+مهم: استخدم الأمر [SEND_IMAGE] في أي مكان في ردك وسيتم إرسال الصورة تلقائياً!`;
+
+    setFormData(prev => ({ ...prev, products_prompt: imageInstructions }));
+    toast.success("تم إضافة تعليمات إرسال الصور!");
+  };
+
   // دالة تحديث البرومت بمعلومات المنتجات (الطريقة القديمة)
   const updatePromptWithProducts = () => {
     const basePrompt = `أنت مساعد ذكي لمتجر إلكتروني. مهمتك الرد على استفسارات العملاء بطريقة ودودة ومفيدة.
@@ -485,20 +501,51 @@ export const GeminiSettings: React.FC = () => {
             <div className="space-y-2">
               <Label htmlFor="products_prompt" className="flex items-center gap-2">
                 <Package className="w-4 h-4" />
-                برومت قواعد المنتجات والمبيعات (اختياري)
+                برومت قواعد المنتجات والصور (اختياري)
               </Label>
+
+              {/* تعليمات إرسال الصور */}
+              <div className="p-4 bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg mb-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <Package className="w-4 h-4 text-green-600" />
+                  <span className="text-sm font-medium text-green-800">📸 تعليمات إرسال الصور التلقائي</span>
+                </div>
+                <div className="text-xs text-green-700 space-y-1">
+                  <p><strong>لإرسال صور المنتجات تلقائياً، استخدم الأمر:</strong></p>
+                  <code className="bg-white px-2 py-1 rounded text-green-800">[SEND_IMAGE: وصف المنتج]</code>
+
+                  <div className="mt-2 space-y-1">
+                    <p><strong>أمثلة:</strong></p>
+                    <div className="bg-white p-2 rounded text-xs">
+                      <p>• إذا طلب "أريد حذاء أسود" → اكتب: <code>[SEND_IMAGE: حذاء أسود]</code></p>
+                      <p>• إذا طلب "عندكم فستان؟" → اكتب: <code>[SEND_IMAGE: فستان]</code></p>
+                      <p>• إذا طلب "أريد حقيبة يد" → اكتب: <code>[SEND_IMAGE: حقيبة يد]</code></p>
+                    </div>
+                  </div>
+
+                  <p className="mt-2"><strong>⚠️ مهم:</strong> استخدم الأمر [SEND_IMAGE] في أي مكان في ردك وسيتم إرسال الصورة تلقائياً!</p>
+                </div>
+              </div>
+
               <Textarea
                 id="products_prompt"
-                placeholder="قواعد التعامل مع المنتجات..."
+                placeholder="عندما يطلب العميل رؤية صورة منتج، استخدم الأمر التالي:
+[SEND_IMAGE: وصف المنتج]
+
+مثال:
+- إذا طلب &quot;أريد حذاء أسود&quot; → اكتب: [SEND_IMAGE: حذاء أسود]
+- إذا طلب &quot;عندكم فستان؟&quot; → اكتب: [SEND_IMAGE: فستان]
+
+مهم: استخدم الأمر [SEND_IMAGE] في أي مكان في ردك وسيتم إرسال الصورة تلقائياً!"
                 value={formData.products_prompt}
                 onChange={(e) =>
                   setFormData(prev => ({ ...prev, products_prompt: e.target.value }))
                 }
-                rows={8}
+                rows={10}
                 className="resize-none font-mono text-sm"
               />
               <p className="text-xs text-muted-foreground">
-                قواعد عرض المنتجات والأسعار والشراء ومعلومات التواصل (يُضاف للبرومت الأساسي عند الحاجة)
+                قواعد التعامل مع المنتجات والصور. <strong>استخدم [SEND_IMAGE: وصف المنتج] لإرسال الصور تلقائياً!</strong>
               </p>
             </div>
 
@@ -567,16 +614,41 @@ export const GeminiSettings: React.FC = () => {
             </AlertDescription>
           </Alert>
 
-          {/* أزرار الحفظ */}
-          <div className="flex gap-2 pt-4">
-            <Button onClick={handleSave} disabled={isSaving}>
-              {isSaving ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Save className="h-4 w-4 mr-2" />
-              )}
-              حفظ الإعدادات
-            </Button>
+          {/* أزرار الحفظ والإعدادات السريعة */}
+          <div className="space-y-3 pt-4">
+            {/* أزرار الإعدادات السريعة */}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={addImageInstructions}
+                variant="outline"
+                size="sm"
+                className="text-green-700 border-green-300 hover:bg-green-50"
+              >
+                <Package className="h-4 w-4 mr-2" />
+                إضافة تعليمات الصور
+              </Button>
+              <Button
+                onClick={updatePromptWithSmartAPI}
+                variant="outline"
+                size="sm"
+                className="text-blue-700 border-blue-300 hover:bg-blue-50"
+              >
+                <Bot className="h-4 w-4 mr-2" />
+                البرومت الذكي الكامل
+              </Button>
+            </div>
+
+            {/* زر الحفظ الرئيسي */}
+            <div className="flex gap-2">
+              <Button onClick={handleSave} disabled={isSaving} className="flex-1">
+                {isSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                حفظ الإعدادات
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

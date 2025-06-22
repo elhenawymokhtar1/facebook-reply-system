@@ -1,5 +1,9 @@
 // Simple API server for handling webhook messages
 import dotenv from 'dotenv';
+
+// إعداد الترميز للنصوص العربية
+process.env.LANG = 'en_US.UTF-8';
+process.env.LC_ALL = 'en_US.UTF-8';
 import express from 'express';
 import cors from 'cors';
 import { createClient } from '@supabase/supabase-js';
@@ -27,8 +31,21 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// إعدادات الترميز للنصوص العربية
+app.use(express.json({
+  limit: '10mb',
+  type: 'application/json',
+  verify: (req, res, buf) => {
+    // التأكد من الترميز الصحيح للنصوص العربية
+    req.rawBody = buf.toString('utf8');
+  }
+}));
+app.use(express.urlencoded({
+  extended: true,
+  limit: '10mb',
+  parameterLimit: 1000,
+  type: 'application/x-www-form-urlencoded'
+}));
 
 // إضافة مسار للملفات الثابتة
 app.use(express.static('public'));

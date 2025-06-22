@@ -58,6 +58,56 @@ export const FacebookAISettings: React.FC = () => {
           </AlertDescription>
         </Alert>
 
+        {/* تعليمات إرسال الصور */}
+        <Card className="border-green-200 bg-gradient-to-r from-green-50 to-blue-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-green-800">
+              <Bot className="w-5 h-5" />
+              📸 كيفية إرسال الصور التلقائي
+            </CardTitle>
+            <CardDescription className="text-green-700">
+              النظام يدعم إرسال صور المنتجات تلقائياً عند طلب العملاء
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="bg-white p-4 rounded-lg border border-green-200">
+              <h4 className="font-medium text-green-800 mb-2">🎯 الأمر السحري:</h4>
+              <code className="bg-green-100 px-3 py-2 rounded text-green-800 font-mono">
+                [SEND_IMAGE: وصف المنتج]
+              </code>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="bg-white p-4 rounded-lg border border-green-200">
+                <h4 className="font-medium text-green-800 mb-2">✅ أمثلة صحيحة:</h4>
+                <div className="space-y-2 text-sm text-green-700">
+                  <p>• <code>[SEND_IMAGE: حذاء أسود]</code></p>
+                  <p>• <code>[SEND_IMAGE: فستان]</code></p>
+                  <p>• <code>[SEND_IMAGE: حقيبة يد]</code></p>
+                  <p>• <code>[SEND_IMAGE: حذاء رياضي أزرق]</code></p>
+                </div>
+              </div>
+
+              <div className="bg-white p-4 rounded-lg border border-green-200">
+                <h4 className="font-medium text-green-800 mb-2">💡 كيف يعمل:</h4>
+                <div className="space-y-1 text-sm text-green-700">
+                  <p>1. العميل يطلب منتج</p>
+                  <p>2. Gemini يكتب الأمر في رده</p>
+                  <p>3. النظام يبحث عن الصورة</p>
+                  <p>4. يتم إرسال الصورة تلقائياً</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg">
+              <p className="text-sm text-amber-800">
+                <strong>⚠️ مهم:</strong> ضع الأمر [SEND_IMAGE] في أي مكان في البرومت أو في قسم "برومت قواعد المنتجات والصور"
+                وسيتم إرسال الصور تلقائياً عندما يطلب العملاء منتجات!
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Quick Access to WhatsApp Settings */}
         <Card>
           <CardHeader>
