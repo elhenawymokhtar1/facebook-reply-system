@@ -1,5 +1,4 @@
 import { useState } from "react";
-import Navigation from "@/components/Navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,9 +36,7 @@ const Categories = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    icon: 'package',
-    color: 'blue',
-    sort_order: 0
+    icon: 'package'
   });
 
   const { categories, isLoading, addCategory, updateCategory, deleteCategory, toggleCategory } = useCategories();
@@ -58,27 +55,25 @@ const Categories = () => {
 
   // خيارات الأيقونات
   const iconOptions = [
-    { value: 'activity', label: '🏃 رياضي', name: 'activity' },
-    { value: 'crown', label: '👑 كلاسيك', name: 'crown' },
-    { value: 'coffee', label: '☕ كاجوال', name: 'coffee' },
-    { value: 'briefcase', label: '💼 رسمي', name: 'briefcase' },
-    { value: 'baby', label: '👶 أطفال', name: 'baby' },
-    { value: 'heart', label: '💖 نسائي', name: 'heart' },
     { value: 'package', label: '📦 عام', name: 'package' },
-    { value: 'star', label: '⭐ مميز', name: 'star' },
     { value: 'shirt', label: '👕 ملابس', name: 'shirt' },
-    { value: 'shoe', label: '👟 أحذية', name: 'shoe' },
+    { value: 'smartphone', label: '📱 إلكترونيات', name: 'smartphone' },
+    { value: 'home', label: '🏠 منزل وحديقة', name: 'home' },
+    { value: 'dumbbell', label: '🏋️ رياضة', name: 'dumbbell' },
+    { value: 'book', label: '📚 كتب', name: 'book' },
+    { value: 'sparkles', label: '✨ جمال وعناية', name: 'sparkles' },
+    { value: 'car', label: '🚗 سيارات', name: 'car' },
+    { value: 'camera', label: '📷 تصوير', name: 'camera' },
+    { value: 'watch', label: '⌚ ساعات', name: 'watch' },
     { value: 'bag', label: '👜 حقائب', name: 'bag' },
-    { value: 'watch', label: '⌚ ساعات', name: 'watch' }
+    { value: 'gift', label: '🎁 هدايا', name: 'gift' }
   ];
 
   const resetForm = () => {
     setFormData({
       name: '',
       description: '',
-      icon: 'package',
-      color: 'blue',
-      sort_order: 0
+      icon: 'package'
     });
     setEditingCategory(null);
   };
@@ -112,9 +107,7 @@ const Categories = () => {
     setFormData({
       name: category.name,
       description: category.description,
-      icon: category.icon,
-      color: category.color,
-      sort_order: category.sort_order
+      icon: category.icon
     });
     setEditingCategory(category);
     setIsAddDialogOpen(true);
@@ -147,8 +140,6 @@ const Categories = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100" dir="rtl">
-      <Navigation />
-
       <div className="container mx-auto px-6 py-8">
         {/* Header */}
         <div className="mb-8">
@@ -264,33 +255,6 @@ const Categories = () => {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div>
-                      <Label>اللون</Label>
-                      <Select value={formData.color} onValueChange={(value) => setFormData({...formData, color: value})}>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {colorOptions.map(option => (
-                            <SelectItem key={option.value} value={option.value}>
-                              <div className="flex items-center gap-2">
-                                <div className={`w-4 h-4 rounded-full ${option.class}`}></div>
-                                {option.label}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label>ترتيب العرض</Label>
-                      <Input
-                        type="number"
-                        value={formData.sort_order}
-                        onChange={(e) => setFormData({...formData, sort_order: parseInt(e.target.value) || 0})}
-                        placeholder="0"
-                      />
-                    </div>
                     <Button 
                       onClick={handleSubmit} 
                       className="w-full"
@@ -343,17 +307,13 @@ const Categories = () => {
                       </div>
                       <div>
                         <h3 className="font-medium text-lg">{category.name}</h3>
-                        <Badge 
-                          variant="outline" 
-                          className={getCategoryColor(category.color)}
+                        <Badge
+                          variant="outline"
+                          className={category.is_active ? 'text-green-600 border-green-200' : 'text-gray-500 border-gray-200'}
                         >
                           {category.is_active ? 'نشط' : 'غير نشط'}
                         </Badge>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <GripVertical className="w-4 h-4 text-gray-400" />
-                      <span className="text-xs text-gray-500">#{category.sort_order}</span>
                     </div>
                   </div>
                 </CardHeader>

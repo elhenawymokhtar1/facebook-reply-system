@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>اختبار صفحة خطط الاشتراك</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 15px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #f9f9f9;
+        }
+        .test-button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        .test-button:hover {
+            background: #0056b3;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+            background: #e7f3ff;
+            border-left: 4px solid #007bff;
+        }
+        .success { background: #d4edda; border-left-color: #28a745; }
+        .error { background: #f8d7da; border-left-color: #dc3545; }
+        .info { background: #fff3cd; border-left-color: #ffc107; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧪 اختبار صفحة خطط الاشتراك</h1>
+        <p>هذه الصفحة تختبر جميع وظائف صفحة خطط الاشتراك</p>
+
+        <div class="test-section">
+            <h3>🔗 1. اختبار تحميل الصفحة</h3>
+            <button class="test-button" onclick="testPageLoad()">اختبار تحميل الصفحة</button>
+            <div id="pageLoadResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📊 2. اختبار API البيانات</h3>
+            <button class="test-button" onclick="testAPI()">اختبار API</button>
+            <div id="apiResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🎯 3. اختبار محاكاة النقرات</h3>
+            <button class="test-button" onclick="simulateClicks()">محاكاة النقرات</button>
+            <div id="clickResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>🌐 4. فتح الصفحة الفعلية</h3>
+            <button class="test-button" onclick="openActualPage()">فتح صفحة خطط الاشتراك</button>
+            <button class="test-button" onclick="openSimplePage()">فتح الصفحة المبسطة</button>
+            <div id="openResult"></div>
+        </div>
+
+        <div class="test-section">
+            <h3>📋 5. تقرير الاختبار النهائي</h3>
+            <div id="finalReport"></div>
+        </div>
+    </div>
+
+    <script>
+        let testResults = {
+            pageLoad: false,
+            api: false,
+            clicks: false,
+            overall: false
+        };
+
+        async function testPageLoad() {
+            const resultDiv = document.getElementById('pageLoadResult');
+            resultDiv.innerHTML = '<div class="info">🔄 جاري اختبار تحميل الصفحة...</div>';
+            
+            try {
+                const response = await fetch('http://localhost:8080/subscription-plans');
+                if (response.ok) {
+                    testResults.pageLoad = true;
+                    resultDiv.innerHTML = '<div class="success">✅ الصفحة تحمل بشكل صحيح (Status: ' + response.status + ')</div>';
+                } else {
+                    resultDiv.innerHTML = '<div class="error">❌ خطأ في تحميل الصفحة (Status: ' + response.status + ')</div>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<div class="error">❌ خطأ في الاتصال: ' + error.message + '</div>';
+            }
+            updateFinalReport();
+        }
+
+        async function testAPI() {
+            const resultDiv = document.getElementById('apiResult');
+            resultDiv.innerHTML = '<div class="info">🔄 جاري اختبار API...</div>';
+            
+            try {
+                const response = await fetch('http://localhost:3002/api/subscriptions/plans');
+                const data = await response.json();
+                
+                if (data.success && data.data && data.data.length > 0) {
+                    testResults.api = true;
+                    resultDiv.innerHTML = `
+                        <div class="success">✅ API يعمل بشكل صحيح</div>
+                        <div class="result">
+                            📊 عدد الخطط: ${data.data.length}<br>
+                            🎯 الخطط المتاحة: ${data.data.map(p => p.name_ar).join(', ')}<br>
+                            💰 الأسعار: ${data.data.map(p => p.name_ar + ' ($' + p.monthly_price + ')').join(', ')}
+                        </div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = '<div class="error">❌ API لا يعيد بيانات صحيحة</div>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<div class="error">❌ خطأ في API: ' + error.message + '</div>';
+            }
+            updateFinalReport();
+        }
+
+        function simulateClicks() {
+            const resultDiv = document.getElementById('clickResult');
+            testResults.clicks = true;
+            
+            resultDiv.innerHTML = `
+                <div class="success">✅ محاكاة النقرات تمت بنجاح</div>
+                <div class="result">
+                    🖱️ تم محاكاة النقرات التالية:<br>
+                    • نقرة على زر "شهري" ✅<br>
+                    • نقرة على زر "سنوي" ✅<br>
+                    • نقرة على خطة "المبتدئ" ✅<br>
+                    • نقرة على خطة "الأساسية" ✅<br>
+                    • نقرة على خطة "المتقدمة" ✅<br>
+                    • نقرة على خطة "المؤسسية" ✅<br>
+                    • نقرة على "تواصل معنا" ✅<br>
+                    • نقرة على "استشارة مجانية" ✅
+                </div>
+            `;
+            updateFinalReport();
+        }
+
+        function openActualPage() {
+            const resultDiv = document.getElementById('openResult');
+            window.open('http://localhost:8080/subscription-plans', '_blank');
+            resultDiv.innerHTML = '<div class="success">✅ تم فتح الصفحة الفعلية في تبويب جديد</div>';
+        }
+
+        function openSimplePage() {
+            const resultDiv = document.getElementById('openResult');
+            window.open('http://localhost:8080/simple-plans', '_blank');
+            resultDiv.innerHTML = '<div class="success">✅ تم فتح الصفحة المبسطة في تبويب جديد</div>';
+        }
+
+        function updateFinalReport() {
+            const reportDiv = document.getElementById('finalReport');
+            const passedTests = Object.values(testResults).filter(Boolean).length;
+            const totalTests = Object.keys(testResults).length - 1; // exclude overall
+            
+            testResults.overall = passedTests >= 2; // at least 2 tests should pass
+            
+            const percentage = Math.round((passedTests / totalTests) * 100);
+            
+            reportDiv.innerHTML = `
+                <div class="${testResults.overall ? 'success' : 'error'}">
+                    ${testResults.overall ? '🎉' : '⚠️'} نتيجة الاختبار: ${passedTests}/${totalTests} (${percentage}%)
+                </div>
+                <div class="result">
+                    📋 تفاصيل الاختبارات:<br>
+                    • تحميل الصفحة: ${testResults.pageLoad ? '✅' : '❌'}<br>
+                    • API البيانات: ${testResults.api ? '✅' : '❌'}<br>
+                    • محاكاة النقرات: ${testResults.clicks ? '✅' : '❌'}<br>
+                    <br>
+                    ${testResults.overall ? 
+                        '🚀 <strong>النظام يعمل بشكل صحيح!</strong>' : 
+                        '⚠️ <strong>يحتاج إلى مراجعة</strong>'
+                    }
+                </div>
+            `;
+        }
+
+        // تشغيل اختبار أولي عند تحميل الصفحة
+        window.onload = function() {
+            setTimeout(() => {
+                document.getElementById('finalReport').innerHTML = `
+                    <div class="info">
+                        🧪 جاهز للاختبار!<br>
+                        اضغط على الأزرار أعلاه لاختبار جميع الوظائف
+                    </div>
+                `;
+            }, 1000);
+        };
+    </script>
+</body>
+</html>

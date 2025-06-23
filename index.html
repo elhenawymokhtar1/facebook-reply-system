@@ -16,45 +16,7 @@
   </head>
 
   <body>
-    <div id="root">
-      <div style="
-        min-height: 100vh;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-family: 'Cairo', sans-serif;
-        text-align: center;
-        padding: 2rem;
-      ">
-        <div>
-          <h1 style="font-size: 3rem; margin-bottom: 1rem;">
-            🔄 جاري تحميل التطبيق...
-          </h1>
-          <p style="font-size: 1.5rem; margin-bottom: 2rem;">
-            يرجى الانتظار...
-          </p>
-          <div style="
-            width: 50px;
-            height: 50px;
-            border: 5px solid rgba(255,255,255,0.3);
-            border-top: 5px solid white;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto;
-          "></div>
-        </div>
-      </div>
-    </div>
-
-    <style>
-      @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
-      }
-    </style>
-
+    <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

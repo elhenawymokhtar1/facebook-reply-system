@@ -11,7 +11,10 @@ import { NameUpdateService } from '../services/nameUpdateService';
 import { processIncomingMessage } from './process-message';
 import geminiRouter from './gemini-routes';
 import whatsappBaileysRoutes from './whatsapp-baileys-routes';
+import subscriptionRouter from './subscription-routes';
 import { forceUpdateAllUserNames } from '../services/forceUpdateNames';
+import { SuperAdminService } from '../services/superAdminService';
+import { requestLogger, errorHandler, notFoundHandler } from './middleware/auth';
 
 // تحميل متغيرات البيئة
 dotenv.config();
@@ -56,6 +59,9 @@ app.use((req, res, next) => {
   next();
 });
 
+// إضافة middleware للتسجيل
+app.use(requestLogger);
+
 // Debug middleware - يجب أن يكون قبل جميع الـ routes
 app.use((req, res, next) => {
   // فقط log للمسارات المهمة
@@ -84,6 +90,21 @@ try {
   app.get('/api/whatsapp-baileys/test', (req, res) => {
     console.log('🧪 WhatsApp Baileys test endpoint hit! (fallback)');
     res.json({ success: true, message: 'WhatsApp Baileys API is working! (fallback)' });
+  });
+}
+
+console.log('🏢 Setting up Subscription routes...');
+// استخدام مسارات نظام الاشتراكات
+try {
+  app.use('/api/subscriptions', subscriptionRouter);
+  console.log('✅ Subscription routes loaded successfully');
+} catch (error) {
+  console.error('❌ Error loading Subscription routes:', error);
+
+  // مسار احتياطي في حالة فشل التحميل
+  app.get('/api/subscriptions/test', (req, res) => {
+    console.log('🧪 Subscription test endpoint hit! (fallback)');
+    res.json({ success: true, message: 'Subscription API is working! (fallback)' });
   });
 }
 
@@ -2129,13 +2150,22 @@ app.get('/api/logs', (req, res) => {
 });
 
 // Start server
-const server = app.listen(PORT, () => {
+const server = app.listen(PORT, async () => {
   console.log(`🚀 Message Processing API started on port ${PORT}`);
   console.log(`📡 Available at: http://localhost:${PORT}`);
   console.log(`🔗 Process message endpoint: http://localhost:${PORT}/api/process-message`);
   console.log(`🔗 Debug conversations endpoint: http://localhost:${PORT}/api/conversations`);
   console.log(`🔗 Debug messages endpoint: http://localhost:${PORT}/api/messages/recent`);
   console.log(`🔗 Debug send message endpoint: http://localhost:${PORT}/api/send-message`);
+
+  // تهيئة النظام عند بدء التشغيل
+  console.log('🔧 [SYSTEM] بدء تهيئة النظام...');
+  try {
+    await SuperAdminService.initializeSystem();
+    console.log('✅ [SYSTEM] تم تهيئة النظام بنجاح');
+  } catch (error) {
+    console.error('❌ [SYSTEM] خطأ في تهيئة النظام:', error);
+  }
 
   // بدء تشغيل الخدمات الاضافية
   try {
@@ -2172,6 +2202,10 @@ app.post('/api/refresh-product-cache', async (req, res) => {
     res.status(500).json({ error: 'Failed to refresh product cache' });
   }
 });
+
+// إضافة معالج الأخطاء والمسارات غير الموجودة
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 process.on('SIGINT', () => {
   console.log('SIGINT received, shutting down gracefully');

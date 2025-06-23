@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
   MessageCircle,
   Facebook,
@@ -29,7 +29,11 @@ import {
   TestTube,
   FileText,
   DollarSign,
-  TrendingUp
+  TrendingUp,
+  LogOut,
+  Building,
+  UserPlus,
+  Crown
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -52,6 +56,33 @@ const menuItems: MenuItem[] = [
     icon: Home,
     path: '/',
     color: 'text-blue-600'
+  },
+  {
+    title: 'إدارة الشركة',
+    icon: Building,
+    color: 'text-orange-600',
+    children: [
+      {
+        title: 'لوحة تحكم الشركة',
+        icon: Building,
+        path: '/company-dashboard'
+      },
+      {
+        title: 'إدارة المستخدمين',
+        icon: Users,
+        path: '/user-management'
+      },
+      {
+        title: 'خطط الاشتراك',
+        icon: Crown,
+        path: '/subscription-plans'
+      },
+      {
+        title: 'ترقية الخطة',
+        icon: TrendingUp,
+        path: '/upgrade-plan'
+      }
+    ]
   },
   {
     title: 'لوحة التحكم',
@@ -298,8 +329,32 @@ const menuItems: MenuItem[] = [
 
 export default function Sidebar({ className }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
-  const [expandedItems, setExpandedItems] = useState<string[]>(['واتساب']);
+  const [expandedItems, setExpandedItems] = useState<string[]>(['إدارة الشركة']);
   const location = useLocation();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    // إزالة بيانات المصادقة
+    localStorage.removeItem('company');
+    localStorage.removeItem('userToken');
+
+    // الانتقال لصفحة تسجيل الدخول
+    navigate('/company-login', { replace: true });
+  };
+
+  const getCompanyInfo = () => {
+    try {
+      const companyData = localStorage.getItem('company');
+      if (companyData) {
+        return JSON.parse(companyData);
+      }
+    } catch (error) {
+      console.error('خطأ في جلب بيانات الشركة:', error);
+    }
+    return null;
+  };
+
+  const company = getCompanyInfo();
 
   const toggleExpanded = (title: string) => {
     setExpandedItems(prev => 
@@ -414,16 +469,30 @@ export default function Sidebar({ className }: SidebarProps) {
 
       {/* Footer */}
       {!isCollapsed && (
-        <div className="p-4 border-t border-gray-200">
+        <div className="p-4 border-t border-gray-200 space-y-3">
+          {/* معلومات الشركة */}
           <div className="flex items-center space-x-3 rtl:space-x-reverse">
-            <div className="w-8 h-8 bg-gray-200 rounded-full flex items-center justify-center">
-              <Users className="w-4 h-4 text-gray-600" />
+            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+              <Building className="w-4 h-4 text-blue-600" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-900 truncate">المدير</p>
-              <p className="text-xs text-gray-500 truncate">admin@company.com</p>
+              <p className="text-sm font-medium text-gray-900 truncate">
+                {company?.name || 'اسم الشركة'}
+              </p>
+              <p className="text-xs text-gray-500 truncate">
+                {company?.email || 'company@example.com'}
+              </p>
             </div>
           </div>
+
+          {/* زر تسجيل الخروج */}
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center space-x-2 rtl:space-x-reverse px-3 py-2 text-sm text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+          >
+            <LogOut className="w-4 h-4" />
+            <span>تسجيل الخروج</span>
+          </button>
         </div>
       )}
     </div>
