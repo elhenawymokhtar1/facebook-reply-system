@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useCurrentCompany } from '@/hooks/useCurrentCompany';
 
 export interface EcommerceProduct {
   id: string;
@@ -40,19 +41,47 @@ export interface CreateProductData {
 export const useEcommerceProducts = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { company } = useCurrentCompany();
 
-  // جلب جميع المنتجات
+  // جلب المتاجر المرتبطة بالشركة الحالية
+  const { data: stores = [] } = useQuery({
+    queryKey: ['company-stores', company?.id],
+    queryFn: async () => {
+      if (!company?.id) return [];
+
+      const { data, error } = await supabase
+        .from('stores')
+        .select('*')
+        .eq('company_id', company.id)
+        .eq('is_active', true);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      console.log('🏪 المتاجر الموجودة:', data);
+      return data || [];
+    },
+    enabled: !!company?.id,
+  });
+
+  // جلب المنتجات المرتبطة بمتاجر الشركة الحالية
   const {
     data: products = [],
     isLoading,
     error,
     refetch
   } = useQuery({
-    queryKey: ['ecommerce-products'],
+    queryKey: ['ecommerce-products', company?.id],
     queryFn: async () => {
+      if (!company?.id || stores.length === 0) return [];
+
+      const storeIds = stores.map(store => store.id);
+
       const { data, error } = await supabase
         .from('ecommerce_products')
         .select('*')
+        .in('store_id', storeIds)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -61,19 +90,27 @@ export const useEcommerceProducts = () => {
 
       return data as EcommerceProduct[];
     },
+    enabled: !!company?.id && stores.length > 0,
   });
 
   // إضافة منتج جديد
   const addProductMutation = useMutation({
     mutationFn: async (productData: CreateProductData) => {
-      // الحصول على معرف المتجر الافتراضي
-      const { data: stores } = await supabase
+      // التحقق من وجود الشركة الحالية
+      if (!company?.id) {
+        throw new Error('لا توجد شركة محددة');
+      }
+
+      // الحصول على متجر الشركة الوحيد
+      const { data: companyStore } = await supabase
         .from('stores')
         .select('id')
-        .limit(1);
+        .eq('company_id', company.id)
+        .eq('is_active', true)
+        .single();
 
-      if (!stores || stores.length === 0) {
-        throw new Error('لا يوجد متجر متاح');
+      if (!companyStore) {
+        throw new Error('لا يوجد متجر متاح لهذه الشركة');
       }
 
       // إنشاء slug من الاسم
@@ -84,7 +121,7 @@ export const useEcommerceProducts = () => {
         .trim();
 
       const newProduct = {
-        store_id: stores[0].id,
+        store_id: companyStore.id,
         name: productData.name,
         slug: slug,
         description: productData.description,

@@ -176,6 +176,11 @@ const menuItems: MenuItem[] = [
     color: 'text-emerald-600',
     children: [
       {
+        title: 'إعدادات المتجر',
+        icon: Store,
+        path: '/store-management'
+      },
+      {
         title: 'المنتجات',
         icon: Package,
         path: '/ecommerce-products'
@@ -204,6 +209,11 @@ const menuItems: MenuItem[] = [
         title: 'إدارة الطلبات',
         icon: FileText,
         path: '/orders'
+      },
+      {
+        title: '🔧 تشخيص الطلبات',
+        icon: FileText,
+        path: '/test-diagnosis'
       },
       {
         title: 'الكوبونات',
@@ -264,6 +274,11 @@ const menuItems: MenuItem[] = [
     icon: TestTube,
     color: 'text-pink-600',
     children: [
+      {
+        title: 'دليل البدء السريع',
+        icon: FileText,
+        path: '/quick-start-guide'
+      },
       {
         title: 'محاكي الدردشة',
         icon: MessageCircle,

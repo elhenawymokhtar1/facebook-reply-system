@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { useCurrentCompany } from '@/hooks/useCurrentCompany';
 import { useToast } from '@/hooks/use-toast';
 
 export interface SalesData {
@@ -72,10 +73,32 @@ export interface OrderData {
 
 export const useAnalytics = (dateRange: number = 30) => {
   const { toast } = useToast();
+  const { company } = useCurrentCompany();
 
   // حساب تاريخ البداية
   const startDate = new Date();
   startDate.setDate(startDate.getDate() - dateRange);
+
+  // جلب متاجر الشركة الحالية
+  const { data: stores = [] } = useQuery({
+    queryKey: ['company-stores', company?.id],
+    queryFn: async () => {
+      if (!company?.id) return [];
+
+      const { data, error } = await supabase
+        .from('stores')
+        .select('id')
+        .eq('company_id', company.id)
+        .eq('is_active', true);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      return data || [];
+    },
+    enabled: !!company?.id,
+  });
 
   // جلب بيانات المبيعات
   const {
@@ -83,12 +106,24 @@ export const useAnalytics = (dateRange: number = 30) => {
     isLoading: salesLoading,
     error: salesError
   } = useQuery({
-    queryKey: ['analytics-sales', dateRange],
+    queryKey: ['analytics-sales', dateRange, company?.id],
     queryFn: async (): Promise<SalesData> => {
+      if (!company?.id || stores.length === 0) {
+        return {
+          totalRevenue: 0,
+          revenueChange: 0,
+          monthlySales: [],
+          dailySales: []
+        };
+      }
+
+      const storeIds = stores.map(store => store.id);
+
       // جلب إجمالي المبيعات
       const { data: orders, error: ordersError } = await supabase
         .from('ecommerce_orders')
         .select('total_amount, created_at')
+        .in('store_id', storeIds)
         .gte('created_at', startDate.toISOString())
         .eq('payment_status', 'paid');
 
@@ -103,6 +138,7 @@ export const useAnalytics = (dateRange: number = 30) => {
       const { data: previousOrders } = await supabase
         .from('ecommerce_orders')
         .select('total_amount')
+        .in('store_id', storeIds)
         .gte('created_at', previousStartDate.toISOString())
         .lt('created_at', startDate.toISOString())
         .eq('payment_status', 'paid');
@@ -123,6 +159,7 @@ export const useAnalytics = (dateRange: number = 30) => {
         const { data: monthOrders } = await supabase
           .from('ecommerce_orders')
           .select('total_amount')
+          .in('store_id', storeIds)
           .gte('created_at', monthStart.toISOString())
           .lt('created_at', monthEnd.toISOString())
           .eq('payment_status', 'paid');
@@ -143,6 +180,7 @@ export const useAnalytics = (dateRange: number = 30) => {
         dailySales: [] // سيتم تطويرها لاحقاً
       };
     },
+    enabled: !!company?.id && stores.length > 0,
   });
 
   // جلب بيانات المنتجات
@@ -218,12 +256,24 @@ export const useAnalytics = (dateRange: number = 30) => {
     isLoading: customerLoading,
     error: customerError
   } = useQuery({
-    queryKey: ['analytics-customers', dateRange],
+    queryKey: ['analytics-customers', dateRange, company?.id],
     queryFn: async (): Promise<CustomerData> => {
+      if (!company?.id || stores.length === 0) {
+        return {
+          totalCustomers: 0,
+          newCustomers: 0,
+          customerGrowth: 0,
+          topCustomers: []
+        };
+      }
+
+      const storeIds = stores.map(store => store.id);
+
       // جلب العملاء الفريدين
       const { data: customers, error: customersError } = await supabase
         .from('ecommerce_orders')
         .select('customer_name, customer_phone, total_amount, created_at')
+        .in('store_id', storeIds)
         .gte('created_at', startDate.toISOString());
 
       if (customersError) throw new Error(customersError.message);
@@ -258,6 +308,7 @@ export const useAnalytics = (dateRange: number = 30) => {
         topCustomers
       };
     },
+    enabled: !!company?.id && stores.length > 0,
   });
 
   // جلب بيانات الطلبات
@@ -266,12 +317,25 @@ export const useAnalytics = (dateRange: number = 30) => {
     isLoading: orderLoading,
     error: orderError
   } = useQuery({
-    queryKey: ['analytics-orders', dateRange],
+    queryKey: ['analytics-orders', dateRange, company?.id],
     queryFn: async (): Promise<OrderData> => {
+      if (!company?.id || stores.length === 0) {
+        return {
+          totalOrders: 0,
+          averageOrderValue: 0,
+          orderGrowth: 0,
+          recentOrders: [],
+          ordersByStatus: []
+        };
+      }
+
+      const storeIds = stores.map(store => store.id);
+
       // جلب الطلبات
       const { data: orders, error: ordersError } = await supabase
         .from('ecommerce_orders')
         .select('*')
+        .in('store_id', storeIds)
         .gte('created_at', startDate.toISOString())
         .order('created_at', { ascending: false });
 
@@ -304,6 +368,7 @@ export const useAnalytics = (dateRange: number = 30) => {
         ordersByStatus
       };
     },
+    enabled: !!company?.id && stores.length > 0,
   });
 
   const isLoading = salesLoading || productLoading || customerLoading || orderLoading;

@@ -44,7 +44,7 @@ export const useCoupons = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // جلب جميع الكوبونات
+  // جلب الكوبونات المرتبطة بالشركة الحالية فقط
   const {
     data: coupons = [],
     isLoading,
@@ -53,15 +53,49 @@ export const useCoupons = () => {
   } = useQuery({
     queryKey: ['coupons'],
     queryFn: async () => {
+      // الحصول على الشركة الحالية
+      const companyData = localStorage.getItem('company');
+      if (!companyData) {
+        console.warn('لا توجد شركة محددة');
+        return [];
+      }
+
+      const company = JSON.parse(companyData);
+      console.log('🔍 جلب الكوبونات للشركة:', company.name);
+
+      // جلب متاجر الشركة أولاً
+      const { data: stores, error: storesError } = await supabase
+        .from('stores')
+        .select('id, name')
+        .eq('company_id', company.id)
+        .eq('is_active', true);
+
+      if (storesError) {
+        console.error('Error fetching stores:', storesError);
+        return [];
+      }
+
+      if (!stores || stores.length === 0) {
+        console.log('لا توجد متاجر للشركة الحالية');
+        return [];
+      }
+
+      const storeIds = stores.map(store => store.id);
+      console.log('🆔 معرفات المتاجر:', storeIds);
+
+      // جلب الكوبونات المرتبطة بمتاجر الشركة
       const { data, error } = await supabase
         .from('coupons')
         .select('*')
+        .in('store_id', storeIds)
         .order('created_at', { ascending: false });
 
       if (error) {
-        throw new Error(error.message);
+        console.error('Error fetching coupons:', error);
+        return [];
       }
 
+      console.log('🎫 الكوبونات المجلبة:', data?.length || 0);
       return data as Coupon[];
     },
   });
@@ -69,17 +103,27 @@ export const useCoupons = () => {
   // إنشاء كوبون جديد
   const createCouponMutation = useMutation({
     mutationFn: async (couponData: CreateCouponData) => {
-      // الحصول على معرف المتجر الافتراضي
+      // الحصول على الشركة الحالية
+      const companyData = localStorage.getItem('company');
+      if (!companyData) {
+        throw new Error('لا توجد شركة محددة');
+      }
+
+      const company = JSON.parse(companyData);
+
+      // الحصول على متاجر الشركة الحالية
       const { data: stores } = await supabase
         .from('stores')
-        .select('id')
+        .select('id, name')
+        .eq('company_id', company.id)
+        .eq('is_active', true)
         .limit(1);
 
       if (!stores || stores.length === 0) {
-        throw new Error('لا يوجد متجر متاح');
+        throw new Error('لا يوجد متجر متاح للشركة الحالية');
       }
 
-      // التحقق من عدم وجود كوبون بنفس الكود
+      // التحقق من عدم وجود كوبون بنفس الكود في نفس المتجر
       const { data: existingCoupon } = await supabase
         .from('coupons')
         .select('id')

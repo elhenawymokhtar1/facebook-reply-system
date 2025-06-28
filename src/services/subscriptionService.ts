@@ -272,6 +272,16 @@ export class SubscriptionService {
       // إنشاء اشتراك مجاني (Starter Plan)
       await this.createFreeSubscription(company.id);
 
+      // إعداد الشركة الجديدة تلقائياً (Gemini + Store)
+      try {
+        const { CompanySetupService } = await import('./companySetupService');
+        await CompanySetupService.setupNewCompany(company.id, company.name);
+        console.log(`✅ [SUBSCRIPTION] تم إعداد الشركة الجديدة تلقائياً: ${company.name}`);
+      } catch (setupError) {
+        console.error(`⚠️ [SUBSCRIPTION] خطأ في الإعداد التلقائي للشركة ${company.name}:`, setupError);
+        // لا نوقف العملية، فقط نسجل الخطأ
+      }
+
       return {
         company,
         success: true,

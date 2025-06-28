@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 // أنواع البيانات
 interface Category {
@@ -35,103 +36,48 @@ const API_BASE = 'http://localhost:3002/api';
 export const useCategories = () => {
   const queryClient = useQueryClient();
 
-  // جلب جميع الفئات مع الإحصائيات
+  // جلب جميع الفئات مع الإحصائيات للشركة الحالية
   const { data: categories = [], isLoading, error } = useQuery({
     queryKey: ['categories'],
     queryFn: async () => {
       try {
-        const response = await fetch(`${API_BASE}/categories`);
-        if (!response.ok) throw new Error('API not available');
-        return response.json();
+        // الحصول على الشركة الحالية
+        const companyData = localStorage.getItem('company');
+        if (!companyData) {
+          console.warn('لا توجد شركة محددة');
+          return [];
+        }
+
+        const company = JSON.parse(companyData);
+        console.log('🔍 جلب الفئات للشركة:', company.name);
+
+        // جلب الفئات من Supabase مع فلترة حسب الشركة
+        const { data, error } = await supabase
+          .from('product_categories')
+          .select(`
+            *,
+            ecommerce_products!inner(
+              id,
+              store_id,
+              stores!inner(
+                company_id
+              )
+            )
+          `)
+          .eq('ecommerce_products.stores.company_id', company.id)
+          .order('sort_order', { ascending: true });
+
+        if (error) {
+          console.error('Error fetching categories:', error);
+          // في حالة الخطأ، إرجاع قائمة فارغة للشركات الجديدة
+          return [];
+        }
+
+        console.log('📋 الفئات المجلبة:', data?.length || 0);
+        return data || [];
       } catch (error) {
-        console.log('API not available, using mock data');
-        // بيانات تجريبية للفئات
-        return [
-          {
-            id: '1',
-            name: 'الإلكترونيات',
-            description: 'أجهزة إلكترونية ومعدات تقنية',
-            icon: 'smartphone',
-            color: 'blue',
-            is_active: true,
-            sort_order: 1,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            total_products: 45,
-            active_products: 42,
-            total_stock: 1250
-          },
-          {
-            id: '2',
-            name: 'الملابس',
-            description: 'ملابس رجالية ونسائية وأطفال',
-            icon: 'shirt',
-            color: 'purple',
-            is_active: true,
-            sort_order: 2,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            total_products: 78,
-            active_products: 75,
-            total_stock: 890
-          },
-          {
-            id: '3',
-            name: 'المنزل والحديقة',
-            description: 'أدوات منزلية ومعدات الحديقة',
-            icon: 'home',
-            color: 'green',
-            is_active: true,
-            sort_order: 3,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            total_products: 32,
-            active_products: 30,
-            total_stock: 567
-          },
-          {
-            id: '4',
-            name: 'الرياضة واللياقة',
-            description: 'معدات رياضية وأدوات اللياقة البدنية',
-            icon: 'dumbbell',
-            color: 'orange',
-            is_active: true,
-            sort_order: 4,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            total_products: 23,
-            active_products: 20,
-            total_stock: 345
-          },
-          {
-            id: '5',
-            name: 'الكتب والمجلات',
-            description: 'كتب ومجلات ومواد تعليمية',
-            icon: 'book',
-            color: 'indigo',
-            is_active: false,
-            sort_order: 5,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            total_products: 15,
-            active_products: 12,
-            total_stock: 234
-          },
-          {
-            id: '6',
-            name: 'الجمال والعناية',
-            description: 'منتجات التجميل والعناية الشخصية',
-            icon: 'sparkles',
-            color: 'pink',
-            is_active: true,
-            sort_order: 6,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            total_products: 56,
-            active_products: 54,
-            total_stock: 678
-          }
-        ];
+        console.log('خطأ في جلب الفئات، إرجاع قائمة فارغة');
+        return [];
       }
     },
     staleTime: 30000,
@@ -141,33 +87,24 @@ export const useCategories = () => {
   // إضافة فئة جديدة
   const addCategory = useMutation({
     mutationFn: async (categoryData: CreateCategoryData) => {
-      try {
-        const response = await fetch(`${API_BASE}/categories`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(categoryData),
-        });
-        if (!response.ok) throw new Error('API not available');
-        return response.json();
-      } catch (error) {
-        console.log('API not available, simulating add category');
-        // محاكاة إضافة فئة جديدة
-        const newCategory = {
-          id: Date.now().toString(),
+      const { data, error } = await supabase
+        .from('product_categories')
+        .insert({
           name: categoryData.name,
           description: categoryData.description || '',
           icon: categoryData.icon || 'package',
-          color: 'blue',
-          is_active: true,
-          sort_order: 0,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          total_products: 0,
-          active_products: 0,
-          total_stock: 0
-        };
-        return newCategory;
+          color: categoryData.color || 'blue',
+          sort_order: categoryData.sort_order || 0,
+          is_active: true
+        })
+        .select()
+        .single();
+
+      if (error) {
+        throw new Error(error.message);
       }
+
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories'] });

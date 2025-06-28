@@ -1510,6 +1510,87 @@ router.post('/admin/login', async (req, res) => {
   }
 });
 
+// 👑 تسجيل دخول المدير الأساسي كشركة (Login As Company)
+router.post('/admin/login-as-company', async (req, res) => {
+  try {
+    const { superAdminId, companyId } = req.body;
+
+    console.log(`👑 [LOGIN_AS] المدير الأساسي ${superAdminId} يحاول الدخول كشركة ${companyId}`);
+
+    if (!superAdminId || !companyId) {
+      return res.status(400).json({
+        success: false,
+        error: 'معرف المدير الأساسي ومعرف الشركة مطلوبان'
+      });
+    }
+
+    const result = await SuperAdminService.loginAsCompany(superAdminId, companyId);
+
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(400).json(result);
+    }
+  } catch (error) {
+    console.error('❌ خطأ في تسجيل الدخول كشركة:', error);
+    res.status(500).json({
+      success: false,
+      error: 'خطأ في الخادم'
+    });
+  }
+});
+
+// 📋 الحصول على قائمة جميع الشركات للمدير الأساسي
+router.get('/admin/companies', async (req, res) => {
+  try {
+    console.log('📋 [SUPER_ADMIN] طلب قائمة جميع الشركات...');
+
+    const result = await SuperAdminService.getAllCompaniesForSuperAdmin();
+
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(400).json(result);
+    }
+  } catch (error) {
+    console.error('❌ خطأ في جلب قائمة الشركات:', error);
+    res.status(500).json({
+      success: false,
+      error: 'خطأ في الخادم'
+    });
+  }
+});
+
+// 🏢 الحصول على تفاصيل شركة محددة للمدير الأساسي
+router.get('/admin/company/:companyId', async (req, res) => {
+  try {
+    const { companyId } = req.params;
+
+    console.log(`🏢 [SUPER_ADMIN] طلب تفاصيل الشركة: ${companyId}`);
+
+    if (!companyId) {
+      return res.status(400).json({
+        success: false,
+        error: 'معرف الشركة مطلوب'
+      });
+    }
+
+    const result = await SuperAdminService.getCompanyDetails(companyId);
+
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(404).json(result);
+    }
+  } catch (error) {
+    console.error('❌ خطأ في جلب تفاصيل الشركة:', error);
+    res.status(500).json({
+      success: false,
+      error: 'خطأ في الخادم'
+    });
+  }
+});
+
 // إنشاء المستخدم الأساسي للنظام
 router.post('/admin/create-super-admin', async (req, res) => {
   try {

@@ -289,13 +289,27 @@ async function getOrCreateConversation(
       return existingConversation.id;
     }
 
-    // إنشاء محادثة جديدة
+    // جلب معلومات الصفحة والشركة
+    const { data: pageInfo, error: pageError } = await supabase
+      .from('facebook_settings')
+      .select('page_id, company_id')
+      .eq('page_id', pageId)
+      .single();
+
+    if (pageError) {
+      console.error('Error fetching page info:', pageError);
+      // استخدام قيم افتراضية إذا لم نجد الصفحة
+    }
+
+    // إنشاء محادثة جديدة مع ربطها بالشركة
     const { data: newConversation, error: createError } = await supabase
       .from('conversations')
       .insert({
         facebook_page_id: pageId,
         customer_facebook_id: customerFacebookId,
         customer_name: customerName,
+        page_id: pageId, // العمود الجديد
+        company_id: pageInfo?.company_id || null, // ربط بالشركة
         last_message_at: new Date().toISOString(),
         is_online: true,
         unread_count: 0

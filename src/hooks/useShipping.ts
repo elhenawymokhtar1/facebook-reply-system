@@ -66,7 +66,7 @@ export const useShipping = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // جلب طرق الشحن
+  // جلب طرق الشحن المرتبطة بالشركة الحالية فقط
   const {
     data: shippingMethods = [],
     isLoading: methodsLoading,
@@ -75,20 +75,54 @@ export const useShipping = () => {
   } = useQuery({
     queryKey: ['shipping-methods'],
     queryFn: async () => {
+      // الحصول على الشركة الحالية
+      const companyData = localStorage.getItem('company');
+      if (!companyData) {
+        console.warn('لا توجد شركة محددة');
+        return [];
+      }
+
+      const company = JSON.parse(companyData);
+      console.log('🔍 جلب طرق الشحن للشركة:', company.name);
+
+      // جلب متاجر الشركة أولاً
+      const { data: stores, error: storesError } = await supabase
+        .from('stores')
+        .select('id, name')
+        .eq('company_id', company.id)
+        .eq('is_active', true);
+
+      if (storesError) {
+        console.error('Error fetching stores:', storesError);
+        return [];
+      }
+
+      if (!stores || stores.length === 0) {
+        console.log('لا توجد متاجر للشركة الحالية');
+        return [];
+      }
+
+      const storeIds = stores.map(store => store.id);
+      console.log('🆔 معرفات المتاجر:', storeIds);
+
+      // جلب طرق الشحن المرتبطة بمتاجر الشركة
       const { data, error } = await supabase
         .from('shipping_methods')
         .select('*')
+        .in('store_id', storeIds)
         .order('created_at', { ascending: false });
 
       if (error) {
-        throw new Error(error.message);
+        console.error('Error fetching shipping methods:', error);
+        return [];
       }
 
+      console.log('🚚 طرق الشحن المجلبة:', data?.length || 0);
       return data as ShippingMethod[];
     },
   });
 
-  // جلب مناطق الشحن
+  // جلب مناطق الشحن المرتبطة بالشركة الحالية فقط
   const {
     data: shippingZones = [],
     isLoading: zonesLoading,
@@ -97,15 +131,49 @@ export const useShipping = () => {
   } = useQuery({
     queryKey: ['shipping-zones'],
     queryFn: async () => {
+      // الحصول على الشركة الحالية
+      const companyData = localStorage.getItem('company');
+      if (!companyData) {
+        console.warn('لا توجد شركة محددة');
+        return [];
+      }
+
+      const company = JSON.parse(companyData);
+      console.log('🔍 جلب مناطق الشحن للشركة:', company.name);
+
+      // جلب متاجر الشركة أولاً
+      const { data: stores, error: storesError } = await supabase
+        .from('stores')
+        .select('id, name')
+        .eq('company_id', company.id)
+        .eq('is_active', true);
+
+      if (storesError) {
+        console.error('Error fetching stores:', storesError);
+        return [];
+      }
+
+      if (!stores || stores.length === 0) {
+        console.log('لا توجد متاجر للشركة الحالية');
+        return [];
+      }
+
+      const storeIds = stores.map(store => store.id);
+      console.log('🆔 معرفات المتاجر:', storeIds);
+
+      // جلب مناطق الشحن المرتبطة بمتاجر الشركة
       const { data, error } = await supabase
         .from('shipping_zones')
         .select('*')
+        .in('store_id', storeIds)
         .order('created_at', { ascending: false });
 
       if (error) {
-        throw new Error(error.message);
+        console.error('Error fetching shipping zones:', error);
+        return [];
       }
 
+      console.log('🗺️ مناطق الشحن المجلبة:', data?.length || 0);
       return data as ShippingZone[];
     },
   });
@@ -115,14 +183,24 @@ export const useShipping = () => {
   // إنشاء طريقة شحن جديدة
   const createShippingMethodMutation = useMutation({
     mutationFn: async (methodData: CreateShippingMethodData) => {
-      // الحصول على معرف المتجر الافتراضي
+      // الحصول على الشركة الحالية
+      const companyData = localStorage.getItem('company');
+      if (!companyData) {
+        throw new Error('لا توجد شركة محددة');
+      }
+
+      const company = JSON.parse(companyData);
+
+      // الحصول على متاجر الشركة الحالية
       const { data: stores } = await supabase
         .from('stores')
-        .select('id')
+        .select('id, name')
+        .eq('company_id', company.id)
+        .eq('is_active', true)
         .limit(1);
 
       if (!stores || stores.length === 0) {
-        throw new Error('لا يوجد متجر متاح');
+        throw new Error('لا يوجد متجر متاح للشركة الحالية');
       }
 
       const newMethod = {
@@ -170,14 +248,24 @@ export const useShipping = () => {
   // إنشاء منطقة شحن جديدة
   const createShippingZoneMutation = useMutation({
     mutationFn: async (zoneData: CreateShippingZoneData) => {
-      // الحصول على معرف المتجر الافتراضي
+      // الحصول على الشركة الحالية
+      const companyData = localStorage.getItem('company');
+      if (!companyData) {
+        throw new Error('لا توجد شركة محددة');
+      }
+
+      const company = JSON.parse(companyData);
+
+      // الحصول على متاجر الشركة الحالية
       const { data: stores } = await supabase
         .from('stores')
-        .select('id')
+        .select('id, name')
+        .eq('company_id', company.id)
+        .eq('is_active', true)
         .limit(1);
 
       if (!stores || stores.length === 0) {
-        throw new Error('لا يوجد متجر متاح');
+        throw new Error('لا يوجد متجر متاح للشركة الحالية');
       }
 
       const newZone = {

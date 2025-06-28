@@ -145,8 +145,13 @@ const RecentMessages = () => {
 
         {!loading && messages.length === 0 && (
           <div className="text-center py-8">
-            <MessageSquare className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-            <p className="text-gray-500">لا توجد رسائل حديثة</p>
+            <MessageSquare className="w-16 h-16 mx-auto mb-4 text-gray-300" />
+            <h3 className="text-lg font-medium text-gray-700 mb-2">لا توجد رسائل بعد</h3>
+            <p className="text-gray-500 mb-4">ستظهر الرسائل الحديثة هنا عندما يتفاعل العملاء مع صفحتك</p>
+            <div className="bg-blue-50 p-4 rounded-lg text-sm text-blue-700 max-w-md mx-auto">
+              <p className="font-medium mb-1">💡 نصيحة:</p>
+              <p>تأكد من إعداد Facebook API وجرب إرسال رسالة تجريبية لصفحتك</p>
+            </div>
           </div>
         )}
 

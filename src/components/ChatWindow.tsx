@@ -164,7 +164,7 @@ const ChatWindow = ({ conversationId }: ChatWindowProps) => {
                 <div className="flex items-center gap-2">
                   <p className="text-xs text-blue-600 flex items-center">
                     📄 {conversation.page_name ||
-                        (conversation.facebook_page_id === '260345600493273' ? 'Swan shop' :
+                        (conversation.facebook_page_id === '351400718067673' ? 'Simple A42' :
                          conversation.facebook_page_id === '240244019177739' ? 'سولا 127' :
                          'صفحة غير معروفة')}
                   </p>

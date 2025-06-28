@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useCurrentCompany } from '@/hooks/useCurrentCompany';
 
 export interface Order {
   id: string;
@@ -22,6 +23,11 @@ export interface Order {
   customer_email?: string;
   customer_phone: string;
   customer_address: string;
+  product_name?: string | null;
+  product_size?: string | null;
+  product_color?: string | null;
+  quantity?: number | null;
+  unit_price?: number | null;
   shipping_address?: any;
   shipped_at?: string;
   delivered_at?: string;
@@ -62,29 +68,151 @@ export interface CreateOrderData {
 }
 
 export const useOrders = () => {
+  console.log('🚀 useOrders hook called!');
+
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { company } = useCurrentCompany();
 
-  // جلب جميع الطلبات
+  console.log('🏢 Current company in useOrders:', {
+    company: company,
+    companyId: company?.id,
+    companyName: company?.name
+  });
+
+  // Alert للتأكد من إن الـ hook بيشتغل
+  if (company?.id) {
+    console.log('🎯 COMPANY FOUND:', company.name, 'ID:', company.id);
+  } else {
+    console.log('❌ NO COMPANY FOUND!');
+  }
+
+  // إعادة تعيين الـ cache عند تغيير الشركة
+  useEffect(() => {
+    if (company?.id) {
+      console.log('🔄 Company changed, invalidating orders cache:', company.name);
+      queryClient.invalidateQueries({ queryKey: ['orders'] });
+      queryClient.invalidateQueries({ queryKey: ['company-stores'] });
+    }
+  }, [company?.id, queryClient]);
+
+  // جلب متاجر الشركة الحالية
+  const {
+    data: stores = [],
+    isLoading: storesLoading,
+    isSuccess: storesSuccess
+  } = useQuery({
+    queryKey: ['company-stores', company?.id],
+    queryFn: async () => {
+      console.log('🏪 Fetching stores for company:', {
+        companyId: company?.id,
+        companyName: company?.name
+      });
+
+      if (!company?.id) {
+        console.log('❌ No company ID, returning empty stores');
+        return [];
+      }
+
+      const { data, error } = await supabase
+        .from('stores')
+        .select('id, name')
+        .eq('company_id', company.id)
+        .eq('is_active', true);
+
+      if (error) {
+        console.error('❌ Error fetching stores:', error);
+        throw new Error(error.message);
+      }
+
+      console.log('🏪 Stores found:', {
+        companyName: company?.name,
+        storesCount: data?.length || 0,
+        stores: data || []
+      });
+
+      return data || [];
+    },
+    enabled: !!company?.id,
+    staleTime: 0, // البيانات تصبح قديمة فوراً لضمان التحديث
+    cacheTime: 1000 * 60 * 5, // الاحتفاظ بالـ cache لمدة 5 دقائق
+  });
+
+  // جلب الطلبات المرتبطة بمتاجر الشركة الحالية فقط
   const {
     data: orders = [],
     isLoading,
     error,
     refetch
   } = useQuery({
-    queryKey: ['orders'],
+    queryKey: ['orders', company?.id, stores.map(s => s.id).sort().join(',')],
     queryFn: async () => {
+      console.log('🔍 useOrders queryFn called with:', {
+        companyId: company?.id,
+        companyName: company?.name,
+        storesCount: stores.length,
+        stores: stores
+      });
+
+      if (!company?.id) {
+        console.log('❌ No company ID, returning empty array');
+        return [];
+      }
+
+      console.log('🔍 About to query orders for company:', {
+        companyId: company.id,
+        companyName: company.name,
+        queryFilter: `company_id = '${company.id}'`
+      });
+
+      // فلترة الطلبات بناءً على company_id
       const { data, error } = await supabase
         .from('ecommerce_orders')
         .select('*')
+        .eq('company_id', company.id)
         .order('created_at', { ascending: false });
 
+      console.log('📊 Raw query result:', {
+        totalResults: data?.length || 0,
+        companyIdUsed: company.id,
+        results: data?.map(o => ({
+          order_number: o.order_number,
+          company_id: o.company_id,
+          matches: o.company_id === company.id
+        })) || []
+      });
+
       if (error) {
+        console.error('❌ Error fetching orders:', error);
         throw new Error(error.message);
       }
 
+      console.log('📦 طلبات الشركة:', {
+        companyName: company?.name,
+        companyId: company?.id,
+        ordersCount: data?.length || 0,
+        orders: data?.map(o => ({
+          id: o.id,
+          order_number: o.order_number,
+          company_id: o.company_id,
+          customer_name: o.customer_name
+        })) || []
+      });
+
+      console.log('🔍 تفاصيل إضافية:', {
+        totalOrdersReceived: data?.length,
+        companyIdUsedForFiltering: company.id,
+        queryUsed: `SELECT * FROM ecommerce_orders WHERE company_id = '${company.id}'`,
+        shouldOnlyShowOrdersFromThisCompany: company.id
+      });
+
       return data as Order[];
     },
+    enabled: !!company?.id, // فقط نحتاج معرف الشركة، RLS سيتولى الفلترة
+    staleTime: 0, // البيانات تصبح قديمة فوراً لضمان التحديث
+    cacheTime: 0, // عدم الاحتفاظ بالـ cache لضمان التحديث الفوري
+    refetchOnMount: true, // إعادة التحميل عند mount
+    refetchOnWindowFocus: true, // إعادة التحميل عند focus
   });
 
   // جلب طلب واحد مع عناصره
@@ -130,9 +258,15 @@ export const useOrders = () => {
       // إنشاء رقم طلب فريد
       const orderNumber = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
 
+      // التأكد من وجود معرف الشركة
+      if (!company?.id) {
+        throw new Error('لا يمكن إنشاء طلب بدون تحديد الشركة');
+      }
+
       // إنشاء الطلب
       const newOrder = {
         store_id: stores[0].id,
+        company_id: company.id, // إضافة معرف الشركة
         order_number: orderNumber,
         status: 'pending' as const,
         currency: 'EGP',

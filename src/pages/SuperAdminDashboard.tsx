@@ -8,22 +8,20 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Crown, 
-  Building, 
-  Users, 
-  TrendingUp, 
-  Shield, 
+import {
+  Crown,
+  Building,
+  Users,
+  TrendingUp,
+  Shield,
   Settings,
   LogOut,
   ArrowLeft,
   Activity,
-  DollarSign,
-  Calendar,
-  Mail,
-  Phone
+  DollarSign
 } from 'lucide-react';
 import { toast } from 'sonner';
+import SuperAdminCompaniesTable from '@/components/SuperAdminCompaniesTable';
 
 interface SystemStats {
   total_companies: number;
@@ -32,27 +30,11 @@ interface SystemStats {
   last_updated: string;
 }
 
-interface Company {
-  id: string;
-  name: string;
-  email: string;
-  phone?: string;
-  city?: string;
-  status: string;
-  created_at: string;
-  subscription?: {
-    plan: {
-      name: string;
-      price_monthly: number;
-    };
-  };
-  users_count: number;
-}
+
 
 const SuperAdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [stats, setStats] = useState<SystemStats | null>(null);
-  const [companies, setCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
   const [superAdmin, setSuperAdmin] = useState<any>(null);
 
@@ -77,24 +59,14 @@ const SuperAdminDashboard: React.FC = () => {
   const loadDashboardData = async () => {
     try {
       setLoading(true);
-      
-      // تحميل الإحصائيات والشركات
-      const [statsRes, companiesRes] = await Promise.all([
-        fetch('http://localhost:3002/api/subscriptions/admin/stats'),
-        fetch('http://localhost:3002/api/subscriptions/admin/companies')
-      ]);
+
+      // تحميل الإحصائيات فقط
+      const statsRes = await fetch('http://localhost:3002/api/subscriptions/admin/stats');
 
       if (statsRes.ok) {
         const statsData = await statsRes.json();
         if (statsData.success) {
           setStats(statsData.data);
-        }
-      }
-
-      if (companiesRes.ok) {
-        const companiesData = await companiesRes.json();
-        if (companiesData.success) {
-          setCompanies(companiesData.data || []);
         }
       }
     } catch (error) {
@@ -111,18 +83,7 @@ const SuperAdminDashboard: React.FC = () => {
     navigate('/super-admin-login');
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'active':
-        return <Badge className="bg-green-500">نشط</Badge>;
-      case 'inactive':
-        return <Badge variant="secondary">غير نشط</Badge>;
-      case 'suspended':
-        return <Badge variant="destructive">معلق</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
-  };
+
 
   if (loading) {
     return (
@@ -235,98 +196,8 @@ const SuperAdminDashboard: React.FC = () => {
           </Card>
         </div>
 
-        {/* قائمة الشركات */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center">
-                  <Building className="h-5 w-5 mr-2" />
-                  الشركات المسجلة
-                </CardTitle>
-                <CardDescription>
-                  إدارة ومراقبة جميع الشركات في النظام
-                </CardDescription>
-              </div>
-              <Button
-                onClick={() => navigate('/companies-management')}
-                className="bg-purple-600 hover:bg-purple-700"
-              >
-                <Building className="h-4 w-4 mr-2" />
-                إدارة الشركات
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {companies.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  لا توجد شركات مسجلة حتى الآن
-                </div>
-              ) : (
-                companies.map((company) => (
-                  <div
-                    key={company.id}
-                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50"
-                  >
-                    <div className="flex items-center space-x-4">
-                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                        <Building className="h-6 w-6 text-blue-600" />
-                      </div>
-                      <div>
-                        <h3 className="font-medium text-lg">{company.name}</h3>
-                        <div className="flex items-center space-x-4 text-sm text-gray-500">
-                          <div className="flex items-center">
-                            <Mail className="h-3 w-3 mr-1" />
-                            <span>{company.email}</span>
-                          </div>
-                          {company.phone && (
-                            <div className="flex items-center">
-                              <Phone className="h-3 w-3 mr-1" />
-                              <span>{company.phone}</span>
-                            </div>
-                          )}
-                          {company.city && (
-                            <span>{company.city}</span>
-                          )}
-                        </div>
-                        <div className="flex items-center space-x-2 text-xs text-gray-400 mt-1">
-                          <Calendar className="h-3 w-3" />
-                          <span>تاريخ التسجيل: {new Date(company.created_at).toLocaleDateString('ar')}</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center space-x-3">
-                      {getStatusBadge(company.status)}
-                      
-                      {company.subscription?.plan && (
-                        <Badge variant="outline">
-                          {company.subscription.plan.name}
-                        </Badge>
-                      )}
-                      
-                      <div className="text-sm text-gray-500">
-                        {company.users_count || 0} مستخدم
-                      </div>
-
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          // يمكن إضافة صفحة تفاصيل الشركة هنا
-                          toast.info('صفحة تفاصيل الشركة قيد التطوير');
-                        }}
-                      >
-                        عرض التفاصيل
-                      </Button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
+        {/* جدول الشركات مع ميزة "دخول كـ" */}
+        <SuperAdminCompaniesTable superAdminId="super-admin-id" />
 
         {/* إجراءات سريعة */}
         <div className="mt-8 grid grid-cols-1 md:grid-cols-4 gap-6">

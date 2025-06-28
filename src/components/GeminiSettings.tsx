@@ -18,7 +18,7 @@ export const GeminiSettings: React.FC = () => {
 
   const [formData, setFormData] = useState({
     api_key: '',
-    model: 'gemini-1.5-flash',
+    model: 'gemini-2.5-flash-lite-preview-06-17',
     prompt_template: '',
     personality_prompt: '',
     products_prompt: '',
@@ -33,7 +33,7 @@ export const GeminiSettings: React.FC = () => {
     if (settings) {
       setFormData({
         api_key: settings.api_key || '',
-        model: settings.model || 'gemini-1.5-flash',
+        model: settings.model || 'gemini-2.5-flash-lite-preview-06-17',
         prompt_template: settings.prompt_template || '',
         personality_prompt: settings.personality_prompt || '',
         products_prompt: settings.products_prompt || '',
@@ -422,19 +422,21 @@ export const GeminiSettings: React.FC = () => {
                 <SelectValue placeholder="اختر النموذج" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="gemini-2.5-flash-preview-05-20">Gemini 2.5 Flash Preview (الأحدث)</SelectItem>
-                <SelectItem value="gemini-2.5-pro-preview-05-06">Gemini 2.5 Pro Preview (الأقوى)</SelectItem>
-                <SelectItem value="gemini-2.0-flash">Gemini 2.0 Flash (مستقر)</SelectItem>
-                <SelectItem value="gemini-2.0-flash-lite">Gemini 2.0 Flash Lite (اقتصادي)</SelectItem>
-                <SelectItem value="gemini-1.5-flash">Gemini 1.5 Flash (قديم)</SelectItem>
-                <SelectItem value="gemini-1.5-pro">Gemini 1.5 Pro (قديم)</SelectItem>
+                <SelectItem value="gemini-2.5-flash-lite-preview-06-17">🚀 Gemini 2.5 Flash Lite (1,000 طلب/يوم)</SelectItem>
+                <SelectItem value="gemini-2.5-flash">⭐ Gemini 2.5 Flash (250 طلب/يوم)</SelectItem>
+                <SelectItem value="gemini-2.5-flash-preview-05-20">🔥 Gemini 2.5 Flash Preview (250 طلب/يوم)</SelectItem>
+                <SelectItem value="gemini-2.0-flash">✅ Gemini 2.0 Flash (200 طلب/يوم)</SelectItem>
+                <SelectItem value="gemini-2.0-flash-lite">💡 Gemini 2.0 Flash Lite (200 طلب/يوم)</SelectItem>
+                <SelectItem value="gemini-2.5-pro-preview-05-06">💎 Gemini 2.5 Pro Preview (مدفوع)</SelectItem>
+                <SelectItem value="gemini-1.5-flash">⚠️ Gemini 1.5 Flash (50 طلب/يوم - قديم)</SelectItem>
+                <SelectItem value="gemini-1.5-pro">❌ Gemini 1.5 Pro (مدفوع - قديم)</SelectItem>
               </SelectContent>
             </Select>
             <p className="text-xs text-muted-foreground">
-              <strong>الأحدث:</strong> 2.5 Flash - سرعة وكفاءة عالية<br/>
-              <strong>الأقوى:</strong> 2.5 Pro - للمهام المعقدة والتفكير المتقدم<br/>
-              <strong>مستقر:</strong> 2.0 Flash - موثوق للاستخدام اليومي<br/>
-              <strong>اقتصادي:</strong> 2.0 Lite - أقل تكلفة وسرعة عالية
+              <strong>🚀 الأفضل:</strong> 2.5 Flash Lite - 1,000 طلب يومياً مجاناً!<br/>
+              <strong>⭐ موصى به:</strong> 2.5 Flash - 250 طلب يومياً، متوازن<br/>
+              <strong>✅ مستقر:</strong> 2.0 Flash - 200 طلب يومياً، موثوق<br/>
+              <strong>⚠️ تجنب:</strong> 1.5 Flash - 50 طلب فقط، قديم ومحدود
             </p>
           </div>
 

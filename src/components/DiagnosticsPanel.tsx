@@ -103,12 +103,13 @@ export const DiagnosticsPanel: React.FC = () => {
         });
       }
 
-      // فحص المحادثات
+      // فحص المحادثات للشركة الحالية فقط
       console.log('🔍 فحص المحادثات...');
       try {
         const { data: conversations, error } = await supabase
           .from('conversations')
-          .select('id, customer_name, facebook_page_id')
+          .select('id, customer_name, facebook_page_id, company_id')
+          .eq('company_id', company?.id)
           .limit(10);
 
         if (error) throw error;
@@ -116,11 +117,12 @@ export const DiagnosticsPanel: React.FC = () => {
         results.push({
           name: 'المحادثات',
           status: 'success',
-          message: `تم العثور على ${conversations?.length || 0} محادثة`,
+          message: `تم العثور على ${conversations?.length || 0} محادثة للشركة الحالية`,
           details: conversations?.map(c => ({
             id: c.id,
             customer: c.customer_name,
-            page_id: c.facebook_page_id
+            page_id: c.facebook_page_id,
+            company_id: c.company_id
           }))
         });
 

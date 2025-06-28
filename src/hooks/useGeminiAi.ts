@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useCurrentCompany } from "@/hooks/useCurrentCompany";
 
 // إزالة الاستيرادات الخاطئة - استخدام SimpleGeminiService فقط
 interface GeminiSettings {
@@ -13,28 +14,39 @@ interface GeminiSettings {
 export const useGeminiSettings = () => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { company } = useCurrentCompany();
 
-  // جلب إعدادات Gemini
+  // جلب إعدادات Gemini مع فلترة حسب الشركة
   const { data: settings, isLoading, error } = useQuery({
-    queryKey: ['gemini-settings'],
+    queryKey: ['gemini-settings', company?.id],
     queryFn: async () => {
-      const response = await fetch('http://localhost:3002/api/gemini/settings');
+      const url = company?.id
+        ? `http://localhost:3002/api/gemini/settings?company_id=${company.id}`
+        : 'http://localhost:3002/api/gemini/settings';
+
+      const response = await fetch(url);
       if (!response.ok) {
         throw new Error('Failed to fetch Gemini settings');
       }
       return await response.json();
     },
+    enabled: !!company, // تأكد من وجود معلومات الشركة
   });
 
-  // حفظ إعدادات Gemini
+  // حفظ إعدادات Gemini مع ربطها بالشركة
   const saveSettings = useMutation({
     mutationFn: async (newSettings: Partial<GeminiSettings>) => {
+      const settingsWithCompany = {
+        ...newSettings,
+        company_id: company?.id || null
+      };
+
       const response = await fetch('http://localhost:3002/api/gemini/settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(newSettings)
+        body: JSON.stringify(settingsWithCompany)
       });
 
       if (!response.ok) {
@@ -45,7 +57,7 @@ export const useGeminiSettings = () => {
       return await response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['gemini-settings'] });
+      queryClient.invalidateQueries({ queryKey: ['gemini-settings', company?.id] });
       toast({
         title: "تم الحفظ",
         description: "تم حفظ إعدادات Gemini AI بنجاح",

@@ -21,7 +21,8 @@ import {
   Rocket,
   TestTube,
   Phone,
-  Bot
+  Bot,
+  Link2
 } from "lucide-react";
 
 const Navigation = () => {
@@ -32,6 +33,7 @@ const Navigation = () => {
     { to: "/store-setup", icon: Rocket, label: "إعداد المتجر", highlight: true },
     { to: "/test-chat", icon: TestTube, label: "محاكي المحادثات", highlight: true },
     { to: "/conversations", icon: MessageCircle, label: "محادثات فيسبوك" },
+    { to: "/connected-pages", icon: Link2, label: "الصفحات المربوطة", highlight: true },
     { to: "/whatsapp-conversations", icon: MessageCircle, label: "محادثات واتساب", highlight: true },
     { to: "/whatsapp", icon: Phone, label: "إدارة WhatsApp", highlight: true },
     { to: "/whatsapp-chat", icon: MessageCircle, label: "دردشة WhatsApp", highlight: true },

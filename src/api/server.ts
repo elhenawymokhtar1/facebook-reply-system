@@ -19,6 +19,8 @@ import { requestLogger, errorHandler, notFoundHandler } from './middleware/auth'
 // تحميل متغيرات البيئة
 dotenv.config();
 
+console.log('🔥🔥🔥 [SERVER] STARTING WITH UPDATED CODE VERSION 2.0! 🔥🔥🔥');
+
 // إعداد Supabase
 const supabaseUrl = 'https://ddwszecfsfkjnahesymm.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRkd3N6ZWNmc2Zram5haGVzeW1tIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzMDc2MDYsImV4cCI6MjA2Mzg4MzYwNn0.5jo4tgLAMqwVnYkhUYBa3WrNxann8xBqkNzba8DaCMg';
@@ -277,6 +279,654 @@ app.get('/api/dashboard-stats', (req, res) => {
   });
 });
 
+// فحص العلاقة بين الشركات والمتاجر والمنتجات
+app.get('/api/check-company-stores', async (req, res) => {
+  try {
+    console.log('🔍 فحص العلاقة بين الشركات والمتاجر والمنتجات...');
+
+    // جلب جميع الشركات مع متاجرها
+    const { data: companies, error: companiesError } = await supabase
+      .from('companies')
+      .select(`
+        id,
+        name,
+        email,
+        stores (
+          id,
+          name,
+          is_active,
+          ecommerce_products (
+            id,
+            name,
+            price,
+            status
+          )
+        )
+      `)
+      .order('name');
+
+    if (companiesError) {
+      console.error('❌ خطأ في جلب البيانات:', companiesError);
+      return res.status(500).json({ error: companiesError.message });
+    }
+
+    const result = companies.map(company => ({
+      company_name: company.name,
+      company_id: company.id,
+      stores_count: company.stores?.length || 0,
+      total_products: company.stores?.reduce((total, store) =>
+        total + (store.ecommerce_products?.length || 0), 0) || 0,
+      stores: company.stores?.map(store => ({
+        store_name: store.name,
+        store_id: store.id,
+        is_active: store.is_active,
+        products_count: store.ecommerce_products?.length || 0,
+        products: store.ecommerce_products?.map(product => ({
+          name: product.name,
+          price: product.price,
+          status: product.status
+        })) || []
+      })) || []
+    }));
+
+    res.json({
+      success: true,
+      data: result,
+      summary: {
+        total_companies: companies.length,
+        companies_with_stores: companies.filter(c => c.stores?.length > 0).length,
+        total_stores: companies.reduce((total, c) => total + (c.stores?.length || 0), 0),
+        total_products: companies.reduce((total, c) =>
+          total + (c.stores?.reduce((storeTotal, store) =>
+            storeTotal + (store.ecommerce_products?.length || 0), 0) || 0), 0)
+      }
+    });
+  } catch (error) {
+    console.error('❌ خطأ في فحص البيانات:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// إصلاح عزل المنتجات بين الشركات
+app.post('/api/fix-company-isolation', async (req, res) => {
+  try {
+    console.log('🔧 بدء إصلاح عزل المنتجات بين الشركات...');
+
+    // 1. جلب جميع الشركات
+    const { data: companies, error: companiesError } = await supabase
+      .from('companies')
+      .select('id, name, email')
+      .order('name');
+
+    if (companiesError) {
+      console.error('❌ خطأ في جلب الشركات:', companiesError);
+      return res.status(500).json({ error: companiesError.message });
+    }
+
+    // 2. جلب المنتجات الموجودة (من أول متجر كنموذج)
+    const { data: existingProducts, error: productsError } = await supabase
+      .from('ecommerce_products')
+      .select('*')
+      .limit(5); // نأخذ 5 منتجات فقط كنموذج
+
+    if (productsError) {
+      console.error('❌ خطأ في جلب المنتجات:', productsError);
+      return res.status(500).json({ error: productsError.message });
+    }
+
+    const results = [];
+
+    // 3. معالجة كل شركة
+    for (const company of companies) {
+      console.log(`🏢 معالجة الشركة: ${company.name}`);
+
+      // التحقق من وجود متاجر للشركة
+      const { data: existingStores, error: storesError } = await supabase
+        .from('stores')
+        .select('id, name')
+        .eq('company_id', company.id);
+
+      if (storesError) {
+        console.error(`❌ خطأ في جلب متاجر الشركة: ${storesError.message}`);
+        continue;
+      }
+
+      let storeId;
+      let storeCreated = false;
+
+      if (existingStores.length === 0) {
+        // إنشاء متجر جديد للشركة
+        const storeName = `متجر ${company.name}`;
+        const storeSlug = `store-${company.name.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}`;
+
+        const { data: newStore, error: createStoreError } = await supabase
+          .from('stores')
+          .insert({
+            company_id: company.id,
+            name: storeName,
+            slug: storeSlug,
+            description: `متجر إلكتروني لشركة ${company.name}`,
+            owner_email: company.email,
+            currency: 'EGP',
+            is_active: true,
+            settings: {}
+          })
+          .select()
+          .single();
+
+        if (createStoreError) {
+          console.error(`❌ خطأ في إنشاء المتجر: ${createStoreError.message}`);
+          continue;
+        }
+
+        storeId = newStore.id;
+        storeCreated = true;
+        console.log(`✅ تم إنشاء المتجر: ${storeName}`);
+      } else {
+        storeId = existingStores[0].id;
+        console.log(`✅ المتجر موجود: ${existingStores[0].name}`);
+      }
+
+      // إنشاء منتجات للمتجر إذا لم تكن موجودة
+      const { data: storeProducts } = await supabase
+        .from('ecommerce_products')
+        .select('id')
+        .eq('store_id', storeId);
+
+      let productsCreated = 0;
+
+      if (!storeProducts || storeProducts.length === 0) {
+        // إنشاء نسخ من المنتجات النموذجية
+        for (const product of existingProducts) {
+          const newProductData = {
+            store_id: storeId,
+            name: product.name,
+            slug: `${product.slug}-${company.name.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}`,
+            description: product.description,
+            short_description: product.short_description,
+            sku: `${product.sku}-${company.name.substring(0, 3).toUpperCase()}-${Date.now()}`,
+            price: product.price,
+            sale_price: product.sale_price,
+            stock_quantity: product.stock_quantity,
+            status: product.status,
+            featured: product.featured,
+            image_url: product.image_url,
+            category: product.category,
+            brand: product.brand
+          };
+
+          const { error: createProductError } = await supabase
+            .from('ecommerce_products')
+            .insert(newProductData);
+
+          if (!createProductError) {
+            productsCreated++;
+          }
+        }
+      }
+
+      results.push({
+        company_name: company.name,
+        company_id: company.id,
+        store_created: storeCreated,
+        store_id: storeId,
+        products_created: productsCreated,
+        existing_products: storeProducts?.length || 0
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'تم إصلاح عزل المنتجات بنجاح',
+      results: results,
+      summary: {
+        companies_processed: companies.length,
+        stores_created: results.filter(r => r.store_created).length,
+        total_products_created: results.reduce((sum, r) => sum + r.products_created, 0)
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في إصلاح عزل المنتجات:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// اختبار نظام تسجيل الشركات
+app.get('/api/test-company-registration', async (req, res) => {
+  try {
+    console.log('🧪 اختبار نظام تسجيل الشركات...');
+
+    // 1. فحص جدول الشركات
+    const { data: companies, error: companiesError } = await supabase
+      .from('companies')
+      .select('id, name, email, status, is_verified, created_at')
+      .order('created_at', { ascending: false })
+      .limit(10);
+
+    if (companiesError) {
+      console.error('❌ خطأ في جلب الشركات:', companiesError);
+      return res.status(500).json({ error: companiesError.message });
+    }
+
+    // 2. فحص جدول خطط الاشتراك
+    const { data: plans, error: plansError } = await supabase
+      .from('subscription_plans')
+      .select('id, name, price, features')
+      .eq('is_active', true);
+
+    if (plansError) {
+      console.error('❌ خطأ في جلب خطط الاشتراك:', plansError);
+      return res.status(500).json({ error: plansError.message });
+    }
+
+    // 3. فحص الاشتراكات النشطة
+    const { data: subscriptions, error: subscriptionsError } = await supabase
+      .from('company_subscriptions')
+      .select(`
+        id,
+        company_id,
+        status,
+        start_date,
+        end_date,
+        companies (name, email)
+      `)
+      .eq('status', 'active');
+
+    if (subscriptionsError) {
+      console.error('❌ خطأ في جلب الاشتراكات:', subscriptionsError);
+      return res.status(500).json({ error: subscriptionsError.message });
+    }
+
+    // 4. إحصائيات
+    const stats = {
+      total_companies: companies.length,
+      verified_companies: companies.filter(c => c.is_verified).length,
+      active_companies: companies.filter(c => c.status === 'active').length,
+      total_plans: plans.length,
+      active_subscriptions: subscriptions.length
+    };
+
+    res.json({
+      success: true,
+      message: 'نظام تسجيل الشركات يعمل بشكل صحيح',
+      data: {
+        companies: companies.map(c => ({
+          id: c.id,
+          name: c.name,
+          email: c.email,
+          status: c.status,
+          is_verified: c.is_verified,
+          created_at: c.created_at
+        })),
+        plans: plans.map(p => ({
+          id: p.id,
+          name: p.name,
+          price: p.price,
+          features: p.features
+        })),
+        subscriptions: subscriptions.map(s => ({
+          id: s.id,
+          company_name: s.companies?.name,
+          company_email: s.companies?.email,
+          status: s.status,
+          start_date: s.start_date,
+          end_date: s.end_date
+        })),
+        stats
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في اختبار نظام التسجيل:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// فحص بيانات تسجيل الدخول للشركات
+app.get('/api/check-company-credentials', async (req, res) => {
+  try {
+    console.log('🔍 فحص بيانات تسجيل الدخول للشركات...');
+
+    // جلب جميع الشركات مع بيانات تسجيل الدخول
+    const { data: companies, error: companiesError } = await supabase
+      .from('companies')
+      .select(`
+        id,
+        name,
+        email,
+        password_hash,
+        status,
+        is_verified,
+        created_at,
+        last_login_at
+      `)
+      .order('created_at', { ascending: false });
+
+    if (companiesError) {
+      console.error('❌ خطأ في جلب الشركات:', companiesError);
+      return res.status(500).json({ error: companiesError.message });
+    }
+
+    // تحليل البيانات
+    const analysis = companies.map(company => ({
+      id: company.id,
+      name: company.name,
+      email: company.email,
+      has_password: !!company.password_hash,
+      password_length: company.password_hash ? company.password_hash.length : 0,
+      status: company.status,
+      is_verified: company.is_verified,
+      created_at: company.created_at,
+      last_login_at: company.last_login_at,
+      can_login: !!company.password_hash && company.status === 'active'
+    }));
+
+    // إحصائيات
+    const stats = {
+      total_companies: companies.length,
+      companies_with_passwords: companies.filter(c => c.password_hash).length,
+      companies_without_passwords: companies.filter(c => !c.password_hash).length,
+      active_companies: companies.filter(c => c.status === 'active').length,
+      verified_companies: companies.filter(c => c.is_verified).length,
+      companies_that_logged_in: companies.filter(c => c.last_login_at).length
+    };
+
+    res.json({
+      success: true,
+      message: 'تم فحص بيانات تسجيل الدخول',
+      data: {
+        companies: analysis,
+        stats,
+        issues: {
+          companies_without_passwords: analysis.filter(c => !c.has_password),
+          inactive_companies: analysis.filter(c => c.status !== 'active'),
+          unverified_companies: analysis.filter(c => !c.is_verified)
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في فحص بيانات تسجيل الدخول:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// إضافة كلمات مرور للشركات التي لا تملك بيانات تسجيل دخول
+app.post('/api/fix-company-passwords', async (req, res) => {
+  try {
+    console.log('🔧 إضافة كلمات مرور للشركات...');
+
+    // جلب الشركات التي لا تملك كلمات مرور
+    const { data: companiesWithoutPasswords, error: fetchError } = await supabase
+      .from('companies')
+      .select('id, name, email')
+      .is('password_hash', null);
+
+    if (fetchError) {
+      console.error('❌ خطأ في جلب الشركات:', fetchError);
+      return res.status(500).json({ error: fetchError.message });
+    }
+
+    if (!companiesWithoutPasswords || companiesWithoutPasswords.length === 0) {
+      return res.json({
+        success: true,
+        message: 'جميع الشركات لديها كلمات مرور',
+        data: { companies_updated: 0 }
+      });
+    }
+
+    const bcrypt = require('bcrypt');
+    const results = [];
+
+    // إضافة كلمة مرور افتراضية لكل شركة
+    for (const company of companiesWithoutPasswords) {
+      const defaultPassword = '123456'; // كلمة مرور افتراضية
+      const passwordHash = await bcrypt.hash(defaultPassword, 12);
+
+      const { error: updateError } = await supabase
+        .from('companies')
+        .update({
+          password_hash: passwordHash,
+          status: 'active',
+          is_verified: true
+        })
+        .eq('id', company.id);
+
+      if (updateError) {
+        console.error(`❌ خطأ في تحديث الشركة ${company.name}:`, updateError);
+        results.push({
+          company_id: company.id,
+          company_name: company.name,
+          success: false,
+          error: updateError.message
+        });
+      } else {
+        console.log(`✅ تم تحديث كلمة المرور للشركة: ${company.name}`);
+        results.push({
+          company_id: company.id,
+          company_name: company.name,
+          email: company.email,
+          success: true,
+          default_password: defaultPassword
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `تم تحديث كلمات المرور لـ ${results.filter(r => r.success).length} شركة`,
+      data: {
+        companies_updated: results.filter(r => r.success).length,
+        companies_failed: results.filter(r => !r.success).length,
+        results: results,
+        note: 'كلمة المرور الافتراضية: 123456'
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في إضافة كلمات المرور:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// فحص شامل لجميع البيانات في قاعدة البيانات
+app.get('/api/database-overview', async (req, res) => {
+  try {
+    console.log('🔍 فحص شامل لقاعدة البيانات...');
+
+    const overview: any = {};
+
+    // 1. فحص جدول الشركات
+    const { data: companies, error: companiesError } = await supabase
+      .from('companies')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!companiesError) {
+      overview.companies = {
+        count: companies.length,
+        data: companies.map(c => ({
+          id: c.id,
+          name: c.name,
+          email: c.email,
+          status: c.status,
+          is_verified: c.is_verified,
+          has_password: !!c.password_hash,
+          created_at: c.created_at,
+          last_login_at: c.last_login_at
+        }))
+      };
+    }
+
+    // 2. فحص جدول المتاجر
+    const { data: stores, error: storesError } = await supabase
+      .from('stores')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!storesError) {
+      overview.stores = {
+        count: stores.length,
+        data: stores.map(s => ({
+          id: s.id,
+          name: s.name,
+          company_id: s.company_id,
+          is_active: s.is_active,
+          created_at: s.created_at
+        }))
+      };
+    }
+
+    // 3. فحص جدول المنتجات
+    const { data: products, error: productsError } = await supabase
+      .from('ecommerce_products')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!productsError) {
+      overview.ecommerce_products = {
+        count: products.length,
+        data: products.map(p => ({
+          id: p.id,
+          name: p.name,
+          store_id: p.store_id,
+          price: p.price,
+          status: p.status,
+          created_at: p.created_at
+        }))
+      };
+    }
+
+    // 4. فحص جدول صفحات فيسبوك
+    const { data: fbSettings, error: fbError } = await supabase
+      .from('facebook_settings')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!fbError) {
+      overview.facebook_settings = {
+        count: fbSettings.length,
+        data: fbSettings.map(f => ({
+          id: f.id,
+          page_id: f.page_id,
+          page_name: f.page_name,
+          company_id: f.company_id,
+          is_active: f.is_active,
+          created_at: f.created_at
+        }))
+      };
+    }
+
+    // 5. فحص جدول المحادثات
+    const { data: conversations, error: convError } = await supabase
+      .from('conversations')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (!convError) {
+      overview.conversations = {
+        count: conversations.length,
+        data: conversations.map(c => ({
+          id: c.id,
+          customer_name: c.customer_name,
+          page_id: c.page_id,
+          company_id: c.company_id,
+          last_message_at: c.last_message_at,
+          created_at: c.created_at
+        }))
+      };
+    }
+
+    // 6. فحص جدول الرسائل
+    const { data: messages, error: msgError } = await supabase
+      .from('messages')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (!msgError) {
+      overview.messages = {
+        count: messages.length,
+        data: messages.map(m => ({
+          id: m.id,
+          conversation_id: m.conversation_id,
+          content: m.content?.substring(0, 100) + '...',
+          sender_type: m.sender_type,
+          created_at: m.created_at
+        }))
+      };
+    }
+
+    // 7. فحص جدول الاشتراكات
+    const { data: subscriptions, error: subError } = await supabase
+      .from('company_subscriptions')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (!subError) {
+      overview.company_subscriptions = {
+        count: subscriptions.length,
+        data: subscriptions
+      };
+    }
+
+    // 8. فحص جداول إضافية
+    const additionalTables = [
+      'subscription_plans',
+      'company_users',
+      'user_sessions',
+      'system_settings',
+      'api_keys',
+      'webhooks',
+      'notifications',
+      'audit_logs'
+    ];
+
+    for (const tableName of additionalTables) {
+      try {
+        const { data, error } = await supabase
+          .from(tableName)
+          .select('*')
+          .limit(10);
+
+        if (!error && data) {
+          overview[tableName] = {
+            count: data.length,
+            data: data
+          };
+        }
+      } catch (err) {
+        // الجدول غير موجود، تجاهل
+      }
+    }
+
+    // 9. إحصائيات عامة
+    overview.summary = {
+      total_companies: overview.companies?.count || 0,
+      total_stores: overview.stores?.count || 0,
+      total_products: overview.ecommerce_products?.count || 0,
+      total_facebook_pages: overview.facebook_settings?.count || 0,
+      total_conversations: overview.conversations?.count || 0,
+      total_messages: overview.messages?.count || 0,
+      total_subscriptions: overview.company_subscriptions?.count || 0,
+      total_subscription_plans: overview.subscription_plans?.count || 0,
+      total_company_users: overview.company_users?.count || 0
+    };
+
+    res.json({
+      success: true,
+      message: 'تم فحص قاعدة البيانات بنجاح',
+      data: overview
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في فحص قاعدة البيانات:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // تم نقل مسارات Gemini إلى gemini-routes.ts
 
 // تم نقل مسار settings إلى gemini-routes.ts
@@ -473,16 +1123,46 @@ app.get('/api/products-grouped', async (req, res) => {
 
 
 // Facebook settings endpoints
+// اختبار بسيط
+app.get('/api/test-company', async (req, res) => {
+  const { company_id } = req.query;
+  console.log('🧪 Test endpoint called with company_id:', company_id);
+
+  const { data, error } = await supabase
+    .from('facebook_settings')
+    .select('page_name, page_id, company_id')
+    .eq('company_id', company_id || '21e34b5d-2750-412c-9a1d-b539addf8cb8');
+
+  console.log('🧪 Test result:', { data, error });
+  res.json({ company_id, data, error });
+});
+
 app.get('/api/facebook/settings', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    console.log('🔍 API Server: Getting Facebook settings...');
+    console.log('🔍 Query params:', req.query);
+
+    const { company_id } = req.query;
+
+    let query = supabase
       .from('facebook_settings')
       .select('*')
       .order('created_at', { ascending: false });
 
+    // فلترة حسب company_id إذا تم تمريره
+    if (company_id) {
+      console.log(`🏢 API Server: Filtering by company_id: ${company_id}`);
+      query = query.eq('company_id', company_id);
+    }
+
+    const { data, error } = await query;
+
     if (error) {
+      console.error('❌ API Server: Error fetching Facebook settings:', error);
       throw error;
     }
+
+    console.log(`✅ API Server: Found ${data?.length || 0} Facebook settings${company_id ? ` for company ${company_id}` : ''}`);
 
     res.json(data || []);
   } catch (error) {
@@ -812,9 +1492,9 @@ app.post('/api/facebook/cleanup-system', async (req, res) => {
 // إضافة صفحة Facebook جديدة مع إعدادات نظيفة
 app.post('/api/facebook/add-page', async (req, res) => {
   try {
-    const { pageId, pageName, accessToken, webhookUrl } = req.body;
+    const { pageId, pageName, accessToken, webhookUrl, companyId } = req.body;
 
-    console.log(`➕ Adding new Facebook page: ${pageName} (${pageId})`);
+    console.log(`➕ Adding new Facebook page: ${pageName} (${pageId})${companyId ? ` for company: ${companyId}` : ''}`);
 
     // التحقق من البيانات المطلوبة
     if (!pageId || !pageName || !accessToken) {
@@ -822,6 +1502,12 @@ app.post('/api/facebook/add-page', async (req, res) => {
         error: 'Missing required fields',
         required: ['pageId', 'pageName', 'accessToken']
       });
+    }
+
+    // تحذير إذا لم يتم تمرير company_id
+    if (!companyId) {
+      console.log('⚠️ تحذير: لم يتم تمرير company_id - الصفحة لن تُربط بشركة محددة');
+      console.log('💡 هذا قد يسبب مشاكل في عرض الصفحات للشركات الجديدة');
     }
 
     // التحقق من عدم وجود الصفحة مسبقاً
@@ -838,19 +1524,29 @@ app.post('/api/facebook/add-page', async (req, res) => {
       });
     }
 
-    // إضافة الصفحة الجديدة مع تفعيل الـ webhook
+    // إضافة الصفحة الجديدة مع company_id
+    const insertData: any = {
+      page_id: pageId,
+      page_name: pageName,
+      access_token: accessToken,
+      webhook_url: webhookUrl || null,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    // إضافة company_id إذا تم تمريره
+    if (companyId) {
+      insertData.company_id = companyId;
+      console.log(`🏢 ربط الصفحة بالشركة: ${companyId}`);
+    } else {
+      console.log('⚠️ لم يتم تمرير company_id - الصفحة لن تُربط بشركة محددة');
+    }
+
+    console.log('💾 إضافة صفحة Facebook جديدة:', { pageId, pageName, hasToken: !!accessToken });
+
     const { data, error } = await supabase
       .from('facebook_settings')
-      .insert({
-        page_id: pageId,
-        page_name: pageName,
-        access_token: accessToken,
-        webhook_url: webhookUrl || null,
-        is_active: true,
-        webhook_enabled: true, // تفعيل الـ webhook تلقائ سؤال
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+      .insert(insertData)
       .select()
       .single();
 
@@ -876,16 +1572,87 @@ app.post('/api/facebook/add-page', async (req, res) => {
   }
 });
 
-// Conversations endpoint
+// Get Facebook conversations endpoint with company filtering
+app.get('/api/facebook/conversations', async (req, res) => {
+  try {
+    console.log('🔍 Facebook conversations endpoint called');
+    const { company_id } = req.query;
+
+    if (!company_id) {
+      return res.status(400).json({ error: 'company_id is required' });
+    }
+
+    console.log(`🔍 API Server: Getting Facebook conversations for company: ${company_id}`);
+
+    // جلب المحادثات مع فلترة الشركة
+    const { data: conversations, error } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('company_id', company_id)
+      .order('last_message_at', { ascending: false });
+
+    if (error) {
+      console.error('❌ Error fetching conversations:', error);
+      return res.status(500).json({ error: 'Failed to fetch conversations' });
+    }
+
+    // جلب معلومات الصفحات
+    const { data: pages, error: pagesError } = await supabase
+      .from('facebook_settings')
+      .select('page_id, page_name');
+
+    if (pagesError) {
+      console.error('❌ Error fetching pages:', pagesError);
+    }
+
+    // إنشاء خريطة للصفحات
+    const pageMap = {};
+    if (pages) {
+      pages.forEach(page => {
+        pageMap[page.page_id] = page.page_name;
+      });
+    }
+
+    // تنسيق البيانات
+    const formattedConversations = conversations?.map(conv => ({
+      id: conv.id,
+      facebook_page_id: conv.facebook_page_id,
+      customer_name: conv.customer_name,
+      customer_facebook_id: conv.customer_facebook_id,
+      last_message: conv.last_message,
+      last_message_at: conv.last_message_at,
+      is_online: conv.is_online,
+      unread_count: conv.unread_count || 0,
+      conversation_status: conv.conversation_status,
+      page_id: conv.page_id,
+      created_at: conv.created_at,
+      updated_at: conv.updated_at,
+      page_name: pageMap[conv.facebook_page_id] || 'صفحة غير معروفة'
+    })) || [];
+
+    console.log(`✅ API Server: Found ${formattedConversations.length} conversations for company ${company_id}`);
+
+    res.json(formattedConversations);
+  } catch (error) {
+    console.error('❌ Error in conversations endpoint:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Conversations endpoint (DEPRECATED - استخدم /api/facebook/conversations بدلاً منه)
 app.get('/api/conversations', async (req, res) => {
   try {
+    console.log('⚠️ [API] DEPRECATED: Conversations endpoint called - يجب استخدام /api/facebook/conversations');
     console.log('📋 [API] Conversations endpoint called...');
+
+    // تحذير في الاستجابة
+    const warningMessage = 'تحذير: هذا الـ endpoint مهجور. استخدم /api/facebook/conversations مع company_id للحصول على نتائج مفلترة';
 
     // دعم للـ limit parameter
     const limit = parseInt(req.query.limit as string) || 100;
     const validLimit = Math.min(Math.max(limit, 1), 200); // بين 1 و 200
 
-    console.log(`📊 Fetching ${validLimit} conversations`);
+    console.log(`📊 Fetching ${validLimit} conversations (WITHOUT COMPANY FILTERING - DEPRECATED)`);
 
     // جلب المحادثات أولاً
     const { data: conversations, error } = await supabase
@@ -919,7 +1686,14 @@ app.get('/api/conversations', async (req, res) => {
 
     console.log(`✅ Successfully fetched ${conversationsWithPageInfo?.length || 0} conversations with page info`);
     console.log(`📄 Available pages: ${pages?.map(p => `${p.page_id}:${p.page_name}`).join(', ')}`);
-    res.json(conversationsWithPageInfo);
+
+    // إضافة تحذير في الاستجابة
+    res.json({
+      warning: warningMessage,
+      deprecated: true,
+      recommended_endpoint: '/api/facebook/conversations?company_id=YOUR_COMPANY_ID',
+      data: conversationsWithPageInfo
+    });
   } catch (error) {
     console.error('❌ Error fetching conversations:', error);
     res.status(500).json({ error: 'Failed to fetch conversations' });
@@ -1546,10 +2320,12 @@ app.get('/webhook', (req, res) => {
 app.post('/webhook', async (req, res) => {
   const body = req.body;
 
-  // إضافة log مباشر إلى ملف
-  import('fs').then(fs => {
-    fs.appendFileSync('webhook-debug.log', `\n${new Date().toISOString()} - WEBHOOK RECEIVED: ${JSON.stringify(body)}\n`);
-  }).catch(err => console.error('Error writing to debug log:', err));
+  // إضافة log للكونسول فقط (لا يمكن استخدام fs في البراوزر)
+  try {
+    console.log('📝 [WEBHOOK DEBUG]', `${new Date().toISOString()} - WEBHOOK RECEIVED: ${JSON.stringify(body)}`);
+  } catch (err) {
+    console.error('Error writing to debug log:', err);
+  }
 
   console.log('🔥🔥🔥 FACEBOOK WEBHOOK RECEIVED! 🔥🔥🔥');
   console.log('📨 Received Facebook webhook:', JSON.stringify(body, null, 2));
@@ -1953,23 +2729,7 @@ app.get('/test', (req, res) => {
   `);
 });
 
-// 📊 API للحصول على المحادثات (للتشخيص)
-app.get('/api/conversations', async (req, res) => {
-  try {
-    const { data, error } = await supabase
-      .from('conversations')
-      .select('id, customer_name, customer_facebook_id, last_message, last_message_at')
-      .order('last_message_at', { ascending: false })
-      .limit(20);
 
-    if (error) throw error;
-
-    res.json(data || []);
-  } catch (error) {
-    console.error('Error fetching conversations:', error);
-    res.status(500).json({ error: 'Failed to fetch conversations' });
-  }
-});
 
 // 📨 API للحصول على الرسائل الأخيرة (للتشخيص)
 app.get('/api/messages/recent', async (req, res) => {
@@ -2149,13 +2909,61 @@ app.get('/api/logs', (req, res) => {
     res.json(logs);
 });
 
+
+
+// Get messages for a specific conversation
+app.get('/api/facebook/conversations/:conversationId/messages', async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+    const { company_id } = req.query;
+
+    if (!company_id) {
+      return res.status(400).json({ error: 'company_id is required' });
+    }
+
+    console.log(`🔍 API Server: Getting messages for conversation: ${conversationId}`);
+
+    // التحقق من أن المحادثة تنتمي للشركة
+    const { data: conversation, error: convError } = await supabase
+      .from('conversations')
+      .select('id, company_id')
+      .eq('id', conversationId)
+      .eq('company_id', company_id)
+      .single();
+
+    if (convError || !conversation) {
+      return res.status(404).json({ error: 'Conversation not found' });
+    }
+
+    // جلب الرسائل
+    const { data: messages, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('❌ Error fetching messages:', error);
+      return res.status(500).json({ error: 'Failed to fetch messages' });
+    }
+
+    console.log(`✅ API Server: Found ${messages?.length || 0} messages for conversation ${conversationId}`);
+
+    res.json(messages || []);
+  } catch (error) {
+    console.error('❌ Error in messages endpoint:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 // Start server
-const server = app.listen(PORT, async () => {
+const server = app.listen(PORT, '0.0.0.0', async () => {
   console.log(`🚀 Message Processing API started on port ${PORT}`);
   console.log(`📡 Available at: http://localhost:${PORT}`);
-  console.log(`🔗 Process message endpoint: http://localhost:${PORT}/api/process-message`);
-  console.log(`🔗 Debug conversations endpoint: http://localhost:${PORT}/api/conversations`);
-  console.log(`🔗 Debug messages endpoint: http://localhost:${PORT}/api/messages/recent`);
+  console.log(`📡 External access: http://192.168.1.3:${PORT}`);
+  console.log(`🔗 Process message endpoint: http://192.168.1.3:${PORT}/api/process-message`);
+  console.log(`🔗 Debug conversations endpoint: http://192.168.1.3:${PORT}/api/conversations`);
+  console.log(`🔗 Debug messages endpoint: http://192.168.1.3:${PORT}/api/messages/recent`);
   console.log(`🔗 Debug send message endpoint: http://localhost:${PORT}/api/send-message`);
 
   // تهيئة النظام عند بدء التشغيل
@@ -2204,6 +3012,244 @@ app.post('/api/refresh-product-cache', async (req, res) => {
 });
 
 // إضافة معالج الأخطاء والمسارات غير الموجودة
+// فحص مشكلة عدم ظهور المنتجات للشركة المحددة
+app.get('/api/debug-company-products/:companyEmail', async (req, res) => {
+  try {
+    const companyEmail = req.params.companyEmail;
+    console.log(`🔍 فحص منتجات الشركة: ${companyEmail}`);
+
+    // 1. البحث عن الشركة
+    const { data: company, error: companyError } = await supabase
+      .from('companies')
+      .select('*')
+      .eq('email', companyEmail)
+      .single();
+
+    if (companyError || !company) {
+      return res.status(404).json({
+        success: false,
+        error: 'الشركة غير موجودة',
+        details: companyError
+      });
+    }
+
+    // 2. البحث عن متاجر الشركة
+    const { data: stores, error: storesError } = await supabase
+      .from('stores')
+      .select('*')
+      .eq('company_id', company.id);
+
+    if (storesError) {
+      return res.status(500).json({
+        success: false,
+        error: 'خطأ في جلب المتاجر',
+        details: storesError
+      });
+    }
+
+    // 3. البحث عن منتجات المتاجر
+    let allProducts = [];
+    if (stores && stores.length > 0) {
+      const storeIds = stores.map(s => s.id);
+
+      const { data: products, error: productsError } = await supabase
+        .from('ecommerce_products')
+        .select('*')
+        .in('store_id', storeIds)
+        .order('created_at', { ascending: false });
+
+      if (!productsError) {
+        allProducts = products || [];
+      }
+    }
+
+    // 4. البحث عن جميع المنتجات في النظام (للمقارنة)
+    const { data: allSystemProducts, error: allProductsError } = await supabase
+      .from('ecommerce_products')
+      .select('*, stores!inner(company_id, name as store_name)')
+      .order('created_at', { ascending: false });
+
+    res.json({
+      success: true,
+      data: {
+        company: {
+          id: company.id,
+          name: company.name,
+          email: company.email,
+          status: company.status
+        },
+        stores: stores.map(s => ({
+          id: s.id,
+          name: s.name,
+          is_active: s.is_active,
+          company_id: s.company_id
+        })),
+        company_products: allProducts.map(p => ({
+          id: p.id,
+          name: p.name,
+          store_id: p.store_id,
+          price: p.price,
+          status: p.status,
+          created_at: p.created_at
+        })),
+        all_system_products: allSystemProducts?.map(p => ({
+          id: p.id,
+          name: p.name,
+          store_id: p.store_id,
+          store_name: p.stores?.store_name,
+          company_id: p.stores?.company_id,
+          price: p.price,
+          status: p.status,
+          created_at: p.created_at
+        })) || [],
+        summary: {
+          company_stores_count: stores.length,
+          company_products_count: allProducts.length,
+          total_system_products: allSystemProducts?.length || 0,
+          products_for_this_company: allSystemProducts?.filter(p => p.stores?.company_id === company.id).length || 0
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في فحص منتجات الشركة:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// إصلاح ربط المنتجات بالشركة المحددة
+app.post('/api/fix-product-company-link/:companyEmail', async (req, res) => {
+  try {
+    const companyEmail = req.params.companyEmail;
+    console.log(`🔧 إصلاح ربط المنتجات للشركة: ${companyEmail}`);
+
+    // 1. البحث عن الشركة
+    const { data: company, error: companyError } = await supabase
+      .from('companies')
+      .select('*')
+      .eq('email', companyEmail)
+      .single();
+
+    if (companyError || !company) {
+      return res.status(404).json({
+        success: false,
+        error: 'الشركة غير موجودة'
+      });
+    }
+
+    // 2. البحث عن متجر الشركة أو إنشاؤه
+    let { data: stores, error: storesError } = await supabase
+      .from('stores')
+      .select('*')
+      .eq('company_id', company.id);
+
+    if (storesError) {
+      return res.status(500).json({
+        success: false,
+        error: 'خطأ في جلب المتاجر'
+      });
+    }
+
+    let storeId: string;
+    if (!stores || stores.length === 0) {
+      // إنشاء متجر جديد للشركة
+      const { data: newStore, error: createStoreError } = await supabase
+        .from('stores')
+        .insert({
+          company_id: company.id,
+          name: `متجر ${company.name}`,
+          slug: `store-${company.name.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}`,
+          description: `متجر إلكتروني لشركة ${company.name}`,
+          owner_email: company.email,
+          currency: 'EGP',
+          is_active: true,
+          settings: {}
+        })
+        .select()
+        .single();
+
+      if (createStoreError) {
+        return res.status(500).json({
+          success: false,
+          error: 'خطأ في إنشاء المتجر'
+        });
+      }
+
+      storeId = newStore.id;
+      console.log(`✅ تم إنشاء متجر جديد: ${newStore.name}`);
+    } else {
+      storeId = stores[0].id;
+      console.log(`✅ استخدام المتجر الموجود: ${stores[0].name}`);
+    }
+
+    // 3. نقل آخر المنتجات المضافة إلى متجر هذه الشركة
+    const { data: recentProducts, error: recentError } = await supabase
+      .from('ecommerce_products')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (recentError) {
+      return res.status(500).json({
+        success: false,
+        error: 'خطأ في جلب المنتجات الحديثة'
+      });
+    }
+
+    let movedProducts = 0;
+    for (const product of recentProducts) {
+      // التحقق من أن المنتج ليس مرتبط بمتجر هذه الشركة بالفعل
+      const { data: productStore } = await supabase
+        .from('stores')
+        .select('company_id')
+        .eq('id', product.store_id)
+        .single();
+
+      if (productStore?.company_id !== company.id) {
+        // إنشاء نسخة من المنتج في متجر الشركة الصحيحة
+        const { error: copyError } = await supabase
+          .from('ecommerce_products')
+          .insert({
+            store_id: storeId,
+            name: product.name,
+            slug: `${product.slug}-${company.name.replace(/\s+/g, '-').toLowerCase()}-${Date.now()}`,
+            description: product.description,
+            short_description: product.short_description,
+            sku: `${product.sku}-${company.name.substring(0, 3).toUpperCase()}`,
+            price: product.price,
+            sale_price: product.sale_price,
+            stock_quantity: product.stock_quantity,
+            status: product.status,
+            featured: product.featured,
+            image_url: product.image_url,
+            category: product.category,
+            brand: product.brand
+          });
+
+        if (!copyError) {
+          movedProducts++;
+          console.log(`✅ تم نسخ المنتج: ${product.name}`);
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `تم إصلاح ربط المنتجات بنجاح`,
+      data: {
+        company_name: company.name,
+        company_email: company.email,
+        store_id: storeId,
+        products_moved: movedProducts
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ خطأ في إصلاح ربط المنتجات:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 app.use(notFoundHandler);
 app.use(errorHandler);
 

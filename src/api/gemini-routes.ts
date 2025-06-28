@@ -67,12 +67,22 @@ router.post('/process', async (req, res) => {
 // Get Gemini settings
 router.get('/settings', async (req, res) => {
   try {
-    console.log('🤖 Fetching Gemini settings...');
+    const { company_id } = req.query;
+    console.log('🤖 Fetching Gemini settings...', { company_id });
 
-    // جلب الإعدادات مباشرة من قاعدة البيانات
-    const { data: settings, error } = await supabase
+    // جلب الإعدادات مع فلترة حسب الشركة
+    let query = supabase
       .from('gemini_settings')
-      .select('*')
+      .select('*');
+
+    if (company_id) {
+      query = query.eq('company_id', company_id);
+    } else {
+      // إذا لم يتم تمرير company_id، جلب الإعدادات العامة (company_id = null)
+      query = query.is('company_id', null);
+    }
+
+    const { data: settings, error } = await query
       .order('updated_at', { ascending: false })
       .limit(1)
       .single();
@@ -92,7 +102,8 @@ router.get('/settings', async (req, res) => {
         products_prompt: '',
         is_enabled: false,
         max_tokens: 1000,
-        temperature: 0.7
+        temperature: 0.7,
+        company_id: company_id || null
       });
     }
 
@@ -114,14 +125,21 @@ router.post('/settings', async (req, res) => {
   try {
     console.log('🤖 Saving Gemini settings...');
     const settings = req.body;
+    const { company_id } = settings;
 
-    // حفظ الإعدادات مباشرة في قاعدة البيانات
+    console.log('🏢 Company ID:', company_id);
+
+    // تحضير البيانات للحفظ
+    const settingsData = {
+      ...settings,
+      company_id: company_id || null,
+      updated_at: new Date().toISOString()
+    };
+
+    // حفظ الإعدادات مع ربطها بالشركة
     const { data: savedSettings, error } = await supabase
       .from('gemini_settings')
-      .upsert({
-        ...settings,
-        updated_at: new Date().toISOString()
-      })
+      .upsert(settingsData)
       .select()
       .single();
 

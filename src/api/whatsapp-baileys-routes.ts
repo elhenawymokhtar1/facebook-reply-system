@@ -138,18 +138,13 @@ router.post('/send-file', upload.single('file'), async (req, res) => {
       caption: caption
     });
 
-    // حفظ الملف مؤقتاً للعرض
-    const fs = require('fs');
-    const path = require('path');
-    const uploadsDir = path.join(process.cwd(), 'uploads');
-
-    // إنشاء مجلد uploads إذا لم يكن موجود
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-
-    const filePath = path.join(uploadsDir, file.originalname);
-    fs.writeFileSync(filePath, file.buffer);
+    // تم إزالة حفظ الملف المحلي - لا يمكن استخدام fs في البراوزر
+    // الملف متاح في memory فقط عبر file.buffer
+    console.log('📎 [API] ملف جاهز للإرسال:', {
+      name: file.originalname,
+      size: file.size,
+      type: file.mimetype
+    });
 
     // إرسال الملف عبر WhatsApp
     const success = await BaileysWhatsAppService.sendFile(
@@ -164,7 +159,7 @@ router.post('/send-file', upload.single('file'), async (req, res) => {
       res.json({
         success: true,
         message: 'تم إرسال الملف بنجاح',
-        fileUrl: `/api/whatsapp-baileys/files/${file.originalname}`
+        fileUrl: null // لا يمكن حفظ الملفات محلياً في البراوزر
       });
     } else {
       res.status(500).json({
@@ -182,24 +177,17 @@ router.post('/send-file', upload.single('file'), async (req, res) => {
 });
 
 /**
- * خدمة الملفات المرفوعة
+ * خدمة الملفات المرفوعة - معطلة (لا يمكن استخدام fs في البراوزر)
  */
 router.get('/files/:filename', (req, res) => {
   try {
     const { filename } = req.params;
-    const fs = require('fs');
-    const path = require('path');
 
-    const filePath = path.join(process.cwd(), 'uploads', filename);
-
-    if (fs.existsSync(filePath)) {
-      res.sendFile(filePath);
-    } else {
-      res.status(404).json({
-        success: false,
-        error: 'الملف غير موجود'
-      });
-    }
+    // لا يمكن خدمة الملفات المحلية في البراوزر
+    res.status(404).json({
+      success: false,
+      error: 'خدمة الملفات غير متاحة في البراوزر'
+    });
   } catch (error) {
     console.error('❌ [API] خطأ في خدمة الملف:', error);
     res.status(500).json({

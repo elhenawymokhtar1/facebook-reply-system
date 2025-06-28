@@ -91,7 +91,7 @@ app.get('/api/gemini/settings', async (req, res) => {
 
     if (!settings) {
       const defaultSettings = {
-        model: 'gemini-1.5-flash',
+        model: 'gemini-2.5-flash-lite-preview-06-17',
         is_enabled: false,
         hasApiKey: false
       };
@@ -99,7 +99,7 @@ app.get('/api/gemini/settings', async (req, res) => {
     }
 
     const response = {
-      model: settings.model || 'gemini-1.5-flash',
+      model: settings.model || 'gemini-2.5-flash-lite-preview-06-17',
       is_enabled: settings.is_enabled || false,
       hasApiKey: !!(settings.api_key && settings.api_key.length > 10)
     };

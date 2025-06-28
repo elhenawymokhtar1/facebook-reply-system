@@ -105,7 +105,7 @@ export const useMessages = (conversationId: string | null) => {
           console.log(`🔍 [${requestId}] معرف الصفحة: ${pageId}`);
 
           // جلب إعدادات الفيسبوك من خلال API
-          const pageSettingsResponse = await fetch(`/api/facebook/page-settings/${pageId}`, {
+          const pageSettingsResponse = await fetch(`http://localhost:3002/api/facebook/page-settings/${pageId}`, {
             method: 'GET',
             headers: { 'Content-Type': 'application/json' }
           });
@@ -128,7 +128,7 @@ export const useMessages = (conversationId: string | null) => {
           if (imageUrl) {
             console.log(`📸 [${requestId}] إرسال صورة إلى Facebook عبر API Server...`);
             
-            const sendImageResponse = await fetch('/api/facebook/send-image', {
+            const sendImageResponse = await fetch('http://localhost:3002/api/facebook/send-image', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -149,7 +149,7 @@ export const useMessages = (conversationId: string | null) => {
             if (content.trim()) {
               console.log(`📝 [${requestId}] إرسال نص مع الصورة...`);
               
-              const sendTextResponse = await fetch('/api/facebook/send-message', {
+              const sendTextResponse = await fetch('http://localhost:3002/api/facebook/send-message', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -170,7 +170,7 @@ export const useMessages = (conversationId: string | null) => {
           } else {
             console.log(`📝 [${requestId}] إرسال رسالة نصية إلى Facebook عبر API Server...`);
             
-            const sendTextResponse = await fetch('/api/facebook/send-message', {
+            const sendTextResponse = await fetch('http://localhost:3002/api/facebook/send-message', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -203,7 +203,7 @@ export const useMessages = (conversationId: string | null) => {
         hasImage: !!imageUrl
       });
 
-      const response = await fetch(`/api/conversations/${conversationId}/messages`, {
+      const response = await fetch(`http://localhost:3002/api/conversations/${conversationId}/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

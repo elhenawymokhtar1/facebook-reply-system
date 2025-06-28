@@ -1,13 +1,16 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { FacebookApiService, createFacebookApiService, FacebookPage } from '@/services/facebookApi';
 import { useToast } from '@/hooks/use-toast';
+import { useCurrentCompany } from '@/hooks/useCurrentCompany';
+import { filterPagesByCompany, getCompanyPages } from '@/utils/companyPageMapping';
 
 export const useFacebookApi = () => {
   const [accessToken, setAccessToken] = useState<string>('');
   const [isConnected, setIsConnected] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { company, isNewCompany } = useCurrentCompany();
 
   // تحميل إعدادات Facebook المحفوظة
   const { data: savedSettings, isLoading: isLoadingSettings } = useQuery({
@@ -15,11 +18,29 @@ export const useFacebookApi = () => {
     queryFn: FacebookApiService.getFacebookSettings,
   });
 
-  // تحميل جميع الصفحات المربوطة
-  const { data: connectedPages = [], isLoading: isLoadingConnectedPages } = useQuery({
-    queryKey: ['connected-pages'],
-    queryFn: FacebookApiService.getAllConnectedPages,
+  // تحميل جميع الصفحات المربوطة للشركة الحالية
+  const { data: allConnectedPages = [], isLoading: isLoadingConnectedPages } = useQuery({
+    queryKey: ['connected-pages', company?.id],
+    queryFn: async () => {
+      try {
+        // جلب الصفحات مع فلترة company_id
+        return await FacebookApiService.getAllConnectedPages(company?.id);
+      } catch (error) {
+        console.error('خطأ في جلب الصفحات:', error);
+        return [];
+      }
+    },
+    enabled: !!company?.id, // تشغيل الاستعلام فقط عند وجود company_id
   });
+
+  // الصفحات المربوطة (مفلترة بالفعل من الخادم)
+  const connectedPages = React.useMemo(() => {
+    console.log('📊 الصفحات المربوطة للشركة:', allConnectedPages?.length || 0);
+    console.log('🏢 الشركة الحالية:', company?.id, company?.name);
+
+    // إرجاع الصفحات كما هي (مفلترة بالفعل من الخادم)
+    return allConnectedPages || [];
+  }, [allConnectedPages, company?.id, company?.name]);
 
   useEffect(() => {
     if (savedSettings) {
@@ -32,9 +53,19 @@ export const useFacebookApi = () => {
   const { data: pages = [], isLoading: isLoadingPages, error: pagesError } = useQuery({
     queryKey: ['facebook-pages', accessToken],
     queryFn: async () => {
-      if (!accessToken) return [];
+      console.log('🔍 جلب صفحات Facebook...');
+      console.log('🔑 Access Token:', accessToken ? 'موجود' : 'غير موجود');
+
+      if (!accessToken) {
+        console.log('❌ لا يوجد Access Token - لا يمكن جلب الصفحات');
+        return [];
+      }
+
       const service = createFacebookApiService(accessToken);
-      return service.getPages();
+      const pages = await service.getPages();
+      console.log('✅ تم جلب الصفحات:', pages?.length || 0);
+
+      return pages;
     },
     enabled: !!accessToken,
   });
@@ -46,7 +77,12 @@ export const useFacebookApi = () => {
       pageAccessToken: string;
       pageName: string;
     }) => {
-      await FacebookApiService.saveFacebookSettings(pageId, pageAccessToken, pageName);
+      console.log('🔗 بدء ربط الصفحة:', { pageId, pageName, companyId: company?.id });
+
+      // حفظ الصفحة مع ربطها بالشركة الحالية
+      await FacebookApiService.saveFacebookSettings(pageId, pageAccessToken, pageName, company?.id);
+
+      console.log('✅ تم ربط الصفحة بنجاح');
       return { pageId, pageAccessToken, pageName };
     },
     onSuccess: (data) => {

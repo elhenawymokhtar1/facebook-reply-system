@@ -166,6 +166,245 @@ export class SuperAdminService {
   }
 
   /**
+   * 👑 تسجيل دخول المدير الأساسي كشركة (Login As Company)
+   */
+  static async loginAsCompany(
+    superAdminId: string,
+    companyId: string
+  ): Promise<{
+    success: boolean;
+    data?: any;
+    message: string;
+  }> {
+    try {
+      console.log(`👑 [LOGIN_AS] المدير الأساسي ${superAdminId} يحاول الدخول كشركة ${companyId}`);
+
+      // التحقق من صحة المدير الأساسي
+      const { data: superAdmin, error: adminError } = await supabase
+        .from('system_admins')
+        .select('id, email, name, role')
+        .eq('id', superAdminId)
+        .eq('is_active', true)
+        .single();
+
+      if (adminError || !superAdmin) {
+        return {
+          success: false,
+          message: 'المدير الأساسي غير موجود أو غير نشط'
+        };
+      }
+
+      // التحقق من وجود الشركة
+      const { data: company, error: companyError } = await supabase
+        .from('companies')
+        .select('*')
+        .eq('id', companyId)
+        .single();
+
+      if (companyError || !company) {
+        return {
+          success: false,
+          message: 'الشركة غير موجودة'
+        };
+      }
+
+      // تسجيل العملية في السجل
+      await this.logSuperAdminAction(superAdminId, 'login_as_company', {
+        company_id: companyId,
+        company_name: company.name,
+        timestamp: new Date().toISOString()
+      });
+
+      console.log(`✅ [LOGIN_AS] تم تسجيل دخول المدير الأساسي كشركة ${company.name}`);
+
+      return {
+        success: true,
+        data: {
+          company,
+          superAdmin: {
+            id: superAdmin.id,
+            email: superAdmin.email,
+            name: superAdmin.name
+          },
+          loginType: 'super_admin_as_company'
+        },
+        message: `تم تسجيل الدخول كشركة ${company.name}`
+      };
+
+    } catch (error) {
+      console.error(`❌ [LOGIN_AS] خطأ في تسجيل الدخول كشركة:`, error);
+      return {
+        success: false,
+        message: 'فشل في تسجيل الدخول كشركة'
+      };
+    }
+  }
+
+  /**
+   * 🏢 الحصول على تفاصيل شركة محددة للمدير الأساسي
+   */
+  static async getCompanyDetails(companyId: string): Promise<{
+    success: boolean;
+    data?: any;
+    message: string;
+  }> {
+    try {
+      console.log(`🏢 [SUPER_ADMIN] جلب تفاصيل الشركة: ${companyId}`);
+
+      const { data: company, error } = await supabase
+        .from('companies')
+        .select(`
+          *,
+          company_subscriptions (
+            id,
+            status,
+            end_date,
+            created_at,
+            subscription_plans (
+              name
+            )
+          ),
+          stores (
+            id,
+            name,
+            is_active,
+            created_at
+          ),
+          company_users (
+            id,
+            name,
+            email,
+            role,
+            is_active,
+            created_at
+          ),
+          conversations (
+            id,
+            customer_name,
+            created_at,
+            last_message_at
+          )
+        `)
+        .eq('id', companyId)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return {
+            success: false,
+            message: 'الشركة غير موجودة'
+          };
+        }
+        throw error;
+      }
+
+      // جلب عدد المنتجات من المتاجر
+      if (company.stores && company.stores.length > 0) {
+        const storeIds = company.stores.map((store: any) => store.id);
+
+        const { data: products, error: productsError } = await supabase
+          .from('ecommerce_products')
+          .select('id, name, status')
+          .in('store_id', storeIds);
+
+        if (!productsError) {
+          company.products = products || [];
+        }
+      }
+
+      console.log(`✅ [SUPER_ADMIN] تم جلب تفاصيل الشركة: ${company.name}`);
+
+      return {
+        success: true,
+        data: company,
+        message: `تم جلب تفاصيل الشركة: ${company.name}`
+      };
+
+    } catch (error) {
+      console.error('❌ [SUPER_ADMIN] خطأ في جلب تفاصيل الشركة:', error);
+      return {
+        success: false,
+        message: 'فشل في جلب تفاصيل الشركة'
+      };
+    }
+  }
+
+  /**
+   * 📋 الحصول على قائمة جميع الشركات للمدير الأساسي
+   */
+  static async getAllCompaniesForSuperAdmin(): Promise<{
+    success: boolean;
+    data?: any[];
+    message: string;
+  }> {
+    try {
+      console.log('📋 [SUPER_ADMIN] جلب قائمة جميع الشركات...');
+
+      const { data: companies, error } = await supabase
+        .from('companies')
+        .select(`
+          id,
+          name,
+          email,
+          phone,
+          status,
+          created_at,
+          last_login_at,
+          company_subscriptions (
+            id,
+            status,
+            end_date,
+            subscription_plans (
+              name
+            )
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      console.log(`✅ [SUPER_ADMIN] تم جلب ${companies.length} شركة`);
+
+      return {
+        success: true,
+        data: companies,
+        message: `تم جلب ${companies.length} شركة`
+      };
+
+    } catch (error) {
+      console.error('❌ [SUPER_ADMIN] خطأ في جلب الشركات:', error);
+      return {
+        success: false,
+        message: 'فشل في جلب قائمة الشركات'
+      };
+    }
+  }
+
+  /**
+   * 📝 تسجيل أنشطة المدير الأساسي
+   */
+  private static async logSuperAdminAction(
+    adminId: string,
+    action: string,
+    details: any
+  ): Promise<void> {
+    try {
+      await supabase
+        .from('super_admin_logs')
+        .insert({
+          admin_id: adminId,
+          action,
+          details,
+          ip_address: 'localhost', // يمكن تحسينه لاحقاً
+          user_agent: 'system',
+          created_at: new Date().toISOString()
+        });
+    } catch (error) {
+      console.error('❌ خطأ في تسجيل نشاط المدير الأساسي:', error);
+    }
+  }
+
+  /**
    * 🔐 تسجيل دخول المستخدم الأساسي للنظام
    */
   static async loginSystemSuperAdmin(

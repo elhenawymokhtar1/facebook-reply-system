@@ -7,6 +7,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Search, User, Clock, MessageSquare, Loader2, Trash2, CheckCircle, AlertCircle, Archive } from "lucide-react";
 import { useState } from "react";
 import { useConversations } from "@/hooks/useConversations";
+import { useCurrentCompany } from "@/hooks/useCurrentCompany";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getDisplayName } from "@/utils/nameUtils";
@@ -21,6 +22,7 @@ const ConversationsList = ({ selectedConversation, onSelectConversation }: Conve
   const [deletingConversation, setDeletingConversation] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<'all' | 'unread'>('all');
   const { conversations, isLoading, error, refetch } = useConversations();
+  const { company, isNewCompany } = useCurrentCompany();
 
   // حذف المحادثة
   const deleteConversation = async (conversationId: string) => {
@@ -166,10 +168,45 @@ const ConversationsList = ({ selectedConversation, onSelectConversation }: Conve
           </div>
         ) : filteredConversations.length === 0 ? (
           <div className="flex items-center justify-center p-8 text-gray-500">
-            <div className="text-center">
-              <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
-              <p>لا توجد محادثات</p>
-              <p className="text-sm mt-2">ستظهر المحادثات هنا عند وصول رسائل جديدة</p>
+            <div className="text-center max-w-sm">
+              <MessageSquare className="w-16 h-16 mx-auto mb-4 opacity-30" />
+
+              {/* رسالة مختلفة للشركات الجديدة */}
+              {isNewCompany ? (
+                <>
+                  <h3 className="text-lg font-medium text-gray-700 mb-2">مرحباً بك في نظامك الجديد! 🎉</h3>
+                  <p className="text-sm text-gray-500 mb-4">
+                    لا توجد محادثات بعد، وهذا طبيعي تماماً للشركات الجديدة. ستظهر المحادثات هنا تلقائياً عندما يرسل العملاء رسائل عبر Facebook Messenger.
+                  </p>
+                  <div className="bg-green-50 p-4 rounded-lg text-right border border-green-200">
+                    <h4 className="font-medium text-green-800 mb-2">🚀 خطوات البدء السريع:</h4>
+                    <ul className="text-sm text-green-700 space-y-1">
+                      <li>• اذهب إلى الإعدادات وأضف مفاتيح Facebook API</li>
+                      <li>• جرب النظام في صفحة الاختبار أولاً</li>
+                      <li>• اطلب من أصدقائك إرسال رسالة لصفحتك</li>
+                      <li>• راقب الردود الذكية تعمل تلقائياً!</li>
+                    </ul>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-lg font-medium text-gray-700 mb-2">لا توجد محادثات</h3>
+                  <p className="text-sm text-gray-500 mb-4">
+                    {searchTerm ?
+                      `لا توجد محادثات تطابق البحث "${searchTerm}"` :
+                      'لا توجد محادثات في الوقت الحالي'
+                    }
+                  </p>
+                  <div className="bg-blue-50 p-4 rounded-lg text-right">
+                    <h4 className="font-medium text-blue-800 mb-2">💡 نصائح:</h4>
+                    <ul className="text-sm text-blue-700 space-y-1">
+                      <li>• تحقق من إعدادات Facebook API</li>
+                      <li>• تأكد من تفعيل الصفحات في الإعدادات</li>
+                      <li>• جرب إرسال رسالة تجريبية</li>
+                    </ul>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         ) : (
@@ -211,7 +248,7 @@ const ConversationsList = ({ selectedConversation, onSelectConversation }: Conve
                       <div className="text-xs mt-1 flex items-center gap-2 flex-wrap">
                         <span className="bg-blue-100 px-2 py-1 rounded-full text-blue-600">
                           📄 {conversation.page_name ||
-                              (conversation.facebook_page_id === '260345600493273' ? 'Swan shop' :
+                              (conversation.facebook_page_id === '351400718067673' ? 'Simple A42' :
                                conversation.facebook_page_id === '240244019177739' ? 'سولا 127' :
                                'صفحة غير معروفة')}
                         </span>

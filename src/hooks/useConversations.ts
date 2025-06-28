@@ -2,6 +2,7 @@
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useCurrentCompany } from "./useCurrentCompany";
 
 export interface Conversation {
   id: string;
@@ -20,40 +21,53 @@ export interface Conversation {
   page_picture_url?: string;
 }
 
+// دالة للتحقق من كون الشركة جديدة (أقل من 7 أيام)
+const isCompanyNew = (createdAt?: string): boolean => {
+  if (!createdAt) return false;
+
+  const createdDate = new Date(createdAt);
+  const now = new Date();
+  const diffInDays = (now.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24);
+
+  return diffInDays <= 7; // شركة جديدة إذا كانت أقل من 7 أيام
+};
+
 export const useConversations = () => {
   const queryClient = useQueryClient();
+  const { company } = useCurrentCompany();
 
   const { data: conversations = [], isLoading, error, refetch } = useQuery({
-    queryKey: ['conversations'],
+    queryKey: ['conversations', company?.id],
     queryFn: async () => {
-      const { data, error: supabaseError } = await supabase
-        .from('conversations')
-        .select('*')
-        .order('last_message_at', { ascending: false })
-        .limit(50);
-
-      if (supabaseError) {
-        throw supabaseError;
+      // التأكد من وجود معلومات الشركة
+      if (!company?.id) {
+        console.log('❌ لا توجد معلومات شركة');
+        return [];
       }
 
-      // إضافة معلومات الصفحة
-      const conversationsWithPageInfo = data?.map(conversation => {
-        let page_name = 'صفحة غير معروفة';
+      console.log(`🔍 جلب المحادثات للشركة: ${company.name} (${company.id})`);
 
-        if (conversation.facebook_page_id === '260345600493273') {
-          page_name = 'Swan shop';
-        } else if (conversation.facebook_page_id === '240244019177739') {
-          page_name = 'سولا 127';
+      // تعطيل فلترة الشركات الجديدة مؤقتاً لعرض البيانات التجريبية
+      // if (isCompanyNew(company.created_at)) {
+      //   console.log('🆕 شركة جديدة - لا توجد محادثات بعد');
+      //   return [];
+      // }
+
+      // استخدام API endpoint مع فلترة الشركة
+      try {
+        const response = await fetch(`/api/facebook/conversations?company_id=${encodeURIComponent(company.id)}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        return {
-          ...conversation,
-          page_name,
-          page_picture_url: null
-        };
-      }) || [];
+        const data = await response.json();
+        console.log(`📊 تم جلب ${data?.length || 0} محادثة للشركة ${company.name} من API`);
 
-      return conversationsWithPageInfo as Conversation[];
+        return data || [];
+      } catch (error) {
+        console.error('خطأ في جلب المحادثات من API:', error);
+        throw error;
+      }
     },
     staleTime: 30000, // البيانات تبقى fresh لمدة 30 ثانية
     cacheTime: 300000, // البيانات تبقى في الكاش لمدة 5 دقائق
