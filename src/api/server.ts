@@ -12,6 +12,7 @@ import { processIncomingMessage } from './process-message';
 import geminiRouter from './gemini-routes';
 import whatsappBaileysRoutes from './whatsapp-baileys-routes';
 import subscriptionRouter from './subscription-routes';
+import facebookConversationsRouter from './facebook-conversations';
 import { forceUpdateAllUserNames } from '../services/forceUpdateNames';
 import { SuperAdminService } from '../services/superAdminService';
 import { requestLogger, errorHandler, notFoundHandler } from './middleware/auth';
@@ -79,6 +80,9 @@ app.use((req, res, next) => {
 console.log('🤖 Setting up Gemini AI routes...');
 // استخدام مسارات Gemini المنفصلة
 app.use('/api/gemini', geminiRouter);
+
+console.log('📱 Setting up Facebook Conversations routes...');
+app.use('/api/facebook', facebookConversationsRouter);
 
 console.log('📱 Setting up WhatsApp Baileys routes...');
 // استخدام مسارات WhatsApp Baileys الحقيقية
