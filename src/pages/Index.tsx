@@ -11,6 +11,7 @@ import QuickActions from "@/components/QuickActions";
 import CompactQuickActions from "@/components/CompactQuickActions";
 import EnhancedQuickActions from "@/components/EnhancedQuickActions";
 import QuickStatsBar from "@/components/QuickStatsBar";
+import { useCurrentCompany } from "@/hooks/useCurrentCompany";
 
 const Index = () => {
   console.log('📊 Index page is rendering...');
@@ -18,6 +19,7 @@ const Index = () => {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const { company, isNewCompany } = useCurrentCompany();
 
   // بيانات افتراضية في حالة فشل التحميل
   const defaultStats = {
@@ -68,11 +70,26 @@ const Index = () => {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">
-                لوحة التحكم
+                {isNewCompany ?
+                  `مرحباً ${company?.name || 'بك'} في نظامك الجديد! 🎉` :
+                  'لوحة التحكم الذكية'
+                }
               </h1>
               <p className="text-gray-600">
-                إدارة الردود الآلية على رسائل الفيسبوك
+                {isNewCompany ?
+                  'نظام ذكي لإدارة رسائل Facebook Messenger والرد التلقائي على العملاء - جاهز للبدء!' :
+                  'إدارة الردود الآلية على رسائل الفيسبوك'
+                }
               </p>
+              {/* رسالة ترحيبية للشركات الجديدة */}
+              {isNewCompany && (
+                <div className="mt-4 p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg">
+                  <h3 className="font-semibold text-green-800 mb-2">🎯 نظامك جاهز للانطلاق!</h3>
+                  <p className="text-green-700 text-sm">
+                    مرحباً بك في عالم الردود الذكية! ابدأ بإعداد Facebook API وشاهد النظام يعمل تلقائياً.
+                  </p>
+                </div>
+              )}
             </div>
             <Button
               onClick={fetchStats}
@@ -139,6 +156,61 @@ const Index = () => {
 
         {/* Quick Stats Bar */}
         <QuickStatsBar />
+
+        {/* قسم البدء السريع للشركات الجديدة */}
+        {isNewCompany && (
+          <div className="mb-8">
+            <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
+              <CardHeader>
+                <CardTitle className="text-green-800 flex items-center gap-2">
+                  <Package className="w-5 h-5" />
+                  دليل البدء السريع
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="text-center p-4 bg-white rounded-lg border border-green-100">
+                    <Settings className="w-8 h-8 mx-auto mb-2 text-green-600" />
+                    <h4 className="font-medium text-green-800 mb-1">1. إعداد النظام</h4>
+                    <p className="text-sm text-green-700 mb-3">اضبط مفاتيح Facebook و Gemini AI</p>
+                    <div className="flex gap-2 justify-center">
+                      <Link to="/settings">
+                        <Button size="sm" className="bg-green-600 hover:bg-green-700">
+                          الإعدادات
+                        </Button>
+                      </Link>
+                      <Link to="/quick-start-guide">
+                        <Button size="sm" variant="outline" className="text-green-600 border-green-600">
+                          الدليل
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg border border-green-100">
+                    <Eye className="w-8 h-8 mx-auto mb-2 text-green-600" />
+                    <h4 className="font-medium text-green-800 mb-1">2. اختبار النظام</h4>
+                    <p className="text-sm text-green-700 mb-3">جرب الردود الذكية قبل التشغيل</p>
+                    <Link to="/simple-test-chat">
+                      <Button size="sm" className="bg-green-600 hover:bg-green-700">
+                        اختبار
+                      </Button>
+                    </Link>
+                  </div>
+                  <div className="text-center p-4 bg-white rounded-lg border border-green-100">
+                    <MessageSquare className="w-8 h-8 mx-auto mb-2 text-green-600" />
+                    <h4 className="font-medium text-green-800 mb-1">3. بدء المحادثات</h4>
+                    <p className="text-sm text-green-700 mb-3">راقب الرسائل الواردة من العملاء</p>
+                    <Link to="/conversations">
+                      <Button size="sm" className="bg-green-600 hover:bg-green-700">
+                        المحادثات
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Quick Actions */}

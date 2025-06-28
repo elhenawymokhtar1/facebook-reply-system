@@ -301,6 +301,7 @@ export const setupEcommerceSystem = async () => {
         -- 🏪 جدول المتاجر
         CREATE TABLE IF NOT EXISTS stores (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+            company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
             name VARCHAR(255) NOT NULL,
             slug VARCHAR(255) UNIQUE NOT NULL,
             description TEXT,

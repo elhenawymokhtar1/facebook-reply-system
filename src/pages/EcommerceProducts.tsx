@@ -77,13 +77,55 @@ const EcommerceProducts = () => {
     featured: false
   });
 
-  // جلب المنتجات
+  // جلب المنتجات المرتبطة بالشركة الحالية
   const fetchProducts = async () => {
     try {
       setLoading(true);
+
+      // الحصول على الشركة الحالية
+      const companyData = localStorage.getItem('company');
+      if (!companyData) {
+        console.warn('لا توجد شركة محددة');
+        setProducts([]);
+        return;
+      }
+
+      const company = JSON.parse(companyData);
+      console.log('🔍 بيانات الشركة من localStorage:', company);
+
+      // جلب متاجر الشركة أولاً
+      const { data: stores, error: storesError } = await supabase
+        .from('stores')
+        .select('id, name')
+        .eq('company_id', company.id)
+        .eq('is_active', true);
+
+      if (storesError) {
+        console.error('Error fetching stores:', storesError);
+        toast({
+          title: "خطأ",
+          description: "فشل في جلب متاجر الشركة",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log('🏪 المتاجر الموجودة:', stores);
+
+      if (!stores || stores.length === 0) {
+        console.log('لا توجد متاجر للشركة الحالية');
+        setProducts([]);
+        return;
+      }
+
+      const storeIds = stores.map(store => store.id);
+      console.log('🆔 معرفات المتاجر:', storeIds);
+
+      // جلب المنتجات المرتبطة بمتاجر الشركة
       const { data, error } = await supabase
         .from('ecommerce_products')
         .select('*')
+        .in('store_id', storeIds)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -96,6 +138,7 @@ const EcommerceProducts = () => {
         return;
       }
 
+      console.log('📦 المنتجات المجلبة:', data);
       setProducts(data || []);
 
       // جلب متغيرات المنتجات
@@ -206,22 +249,38 @@ const EcommerceProducts = () => {
         });
       } else {
         // إضافة منتج جديد
-        const { data: stores } = await supabase
-          .from('stores')
-          .select('id')
-          .limit(1);
-
-        if (!stores || stores.length === 0) {
+        // الحصول على الشركة الحالية
+        const companyData = localStorage.getItem('company');
+        if (!companyData) {
           toast({
             title: "خطأ",
-            description: "لا يوجد متجر متاح",
+            description: "لا توجد شركة محددة",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const company = JSON.parse(companyData);
+
+        // جلب متجر الشركة الوحيد
+        const { data: store } = await supabase
+          .from('stores')
+          .select('id')
+          .eq('company_id', company.id)
+          .eq('is_active', true)
+          .single();
+
+        if (!store) {
+          toast({
+            title: "خطأ",
+            description: "لا يوجد متجر متاح لهذه الشركة",
             variant: "destructive",
           });
           return;
         }
 
         const productData = {
-          store_id: stores[0].id,
+          store_id: store.id,
           name: newProduct.name,
           description: newProduct.description,
           short_description: newProduct.short_description,

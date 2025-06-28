@@ -62,7 +62,7 @@ export function getDisplayName(
 ): string {
   // حالات خاصة معينة
   if (customerName === 'Mokhtar Elsnayy') return 'Mokhtar Elsnayy';
-  if (customerId === '260345600493273') return 'Swan shop';
+  if (customerId === '351400718067673') return 'Simple A42';
   
   // فحص ما إذا كان الاسم بحاجة إلى استبدال
   if (needsNameReplacement(customerName)) {

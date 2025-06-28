@@ -603,23 +603,13 @@ export class BaileysWhatsAppService {
    */
   private static async clearAuthState(): Promise<void> {
     try {
-      const fs = await import('fs');
-      const path = await import('path');
-
-      const authDir = './baileys_auth';
-
-      if (fs.existsSync(authDir)) {
-        // حذف جميع ملفات المصادقة
-        const files = fs.readdirSync(authDir);
-        for (const file of files) {
-          const filePath = path.join(authDir, file);
-          fs.unlinkSync(filePath);
-          console.log(`🗑️ [BAILEYS] تم حذف ملف: ${file}`);
-        }
-
-        // حذف المجلد نفسه
-        fs.rmdirSync(authDir);
-        console.log('🗑️ [BAILEYS] تم حذف مجلد المصادقة');
+      // لا يمكن استخدام fs في البراوزر - استخدام localStorage بدلاً من ذلك
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('baileys_auth_state');
+        localStorage.removeItem('baileys_session');
+        console.log('🗑️ [BAILEYS] تم مسح بيانات المصادقة من localStorage');
+      } else {
+        console.log('⚠️ [BAILEYS] مسح المصادقة غير متاح (server-side)');
       }
 
       // مسح QR Code من قاعدة البيانات

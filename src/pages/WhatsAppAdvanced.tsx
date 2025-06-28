@@ -116,7 +116,7 @@ const WhatsAppAdvanced: React.FC = () => {
 
   const handleSendMessage = async (phoneNumber: string, message: string) => {
     try {
-      const response = await fetch('/api/whatsapp-baileys/send-message', {
+      const response = await fetch('http://localhost:3002/api/whatsapp-baileys/send-message', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -9,28 +9,22 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { OrderService, OrderData } from '@/services/orderService';
+import { useOrders } from '@/hooks/useOrders';
 import { Package, Phone, MapPin, Calendar, DollarSign, Eye, Edit, Truck } from 'lucide-react';
 import { toast } from 'sonner';
 
 const Orders: React.FC = () => {
-  const [orders, setOrders] = useState<OrderData[]>([]);
-  const [loading, setLoading] = useState(true);
+  console.log('📦 Orders component rendered!');
+
+  const { orders, isLoading: loading, refetch } = useOrders();
   const [selectedOrder, setSelectedOrder] = useState<OrderData | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
-  // تحميل الطلبات
-  const loadOrders = async () => {
-    try {
-      setLoading(true);
-      const ordersData = await OrderService.getAllOrders();
-      setOrders(ordersData);
-    } catch (error) {
-      console.error('Error loading orders:', error);
-      toast.error('خطأ في تحميل الطلبات');
-    } finally {
-      setLoading(false);
-    }
-  };
+  console.log('📊 Orders data:', {
+    ordersCount: orders?.length || 0,
+    loading,
+    orders: orders?.map(o => ({ order_number: o.order_number, company_id: o.company_id })) || []
+  });
 
   // تحديث حالة الطلب
   const updateOrderStatus = async (orderId: string, newStatus: OrderData['status']) => {
@@ -38,7 +32,7 @@ const Orders: React.FC = () => {
       const success = await OrderService.updateOrderStatus(orderId, newStatus);
       if (success) {
         toast.success('تم تحديث حالة الطلب بنجاح');
-        loadOrders(); // إعادة تحميل الطلبات
+        refetch(); // إعادة تحميل الطلبات
       } else {
         toast.error('فشل في تحديث حالة الطلب');
       }
@@ -79,9 +73,7 @@ const Orders: React.FC = () => {
     }
   };
 
-  useEffect(() => {
-    loadOrders();
-  }, []);
+
 
   if (loading) {
     return (
@@ -117,7 +109,7 @@ const Orders: React.FC = () => {
               <SelectItem value="cancelled">ملغي</SelectItem>
             </SelectContent>
           </Select>
-          <Button onClick={loadOrders}>
+          <Button onClick={() => refetch()}>
             تحديث
           </Button>
         </div>
@@ -132,6 +124,7 @@ const Orders: React.FC = () => {
               <div>
                 <p className="text-sm text-muted-foreground">إجمالي الطلبات</p>
                 <p className="text-2xl font-bold">{orders.length}</p>
+                <p className="text-xs text-red-500">DEBUG: {JSON.stringify({ordersLength: orders.length, filteredLength: filteredOrders.length})}</p>
               </div>
             </div>
           </CardContent>
@@ -207,13 +200,16 @@ const Orders: React.FC = () => {
                   </TableCell>
                   <TableCell>
                     <div>
-                      <p>{order.product_name}</p>
+                      <p>{order.product_name || 'غير محدد'}</p>
                       <p className="text-sm text-muted-foreground">
-                        مقاس {order.product_size} - {order.product_color}
+                        {order.product_size || order.product_color ?
+                          `${order.product_size ? `مقاس ${order.product_size}` : ''} ${order.product_size && order.product_color ? ' - ' : ''} ${order.product_color || ''}`
+                          : 'غير محدد'
+                        }
                       </p>
                     </div>
                   </TableCell>
-                  <TableCell>{order.total_price} ج.م</TableCell>
+                  <TableCell>{order.total_amount} ج.م</TableCell>
                   <TableCell>
                     <Badge className={getStatusColor(order.status || 'pending')}>
                       {getStatusText(order.status || 'pending')}
@@ -307,15 +303,15 @@ const OrderDetailsDialog: React.FC<{
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div>
           <Label>المنتج</Label>
-          <Input value={order.product_name} readOnly />
+          <Input value={order.product_name || 'غير محدد'} readOnly />
         </div>
         <div>
           <Label>المقاس</Label>
-          <Input value={order.product_size} readOnly />
+          <Input value={order.product_size || 'غير محدد'} readOnly />
         </div>
         <div>
           <Label>اللون</Label>
-          <Input value={order.product_color} readOnly />
+          <Input value={order.product_color || 'غير محدد'} readOnly />
         </div>
       </div>
 

@@ -1,978 +1,503 @@
-
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Facebook, Key, Bell, Clock, Shield, Loader2, CheckCircle, AlertCircle, Bot, Activity, Trash2, Power, RotateCcw, AlertTriangle, Unplug, MessageSquare } from "lucide-react";
-import WebhookDiagnostics from "@/components/WebhookDiagnostics";
+import { Facebook, Key, Loader2, CheckCircle, AlertCircle, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useFacebookApi } from "@/hooks/useFacebookApi";
-
-
+import { useCurrentCompany } from "@/hooks/useCurrentCompany";
+import { supabase } from "@/integrations/supabase/client";
 
 const Settings = () => {
   const { toast } = useToast();
-  const [tempAccessToken, setTempAccessToken] = useState("EAAUpPO0SIEABO9ihG4UZBS1qLGUzMDGxcZAJP0SZAm9jYfLv6O6SmTQNmEYaXRW6rH8zMT6Iiu57wJRUZC9ipGlCF5y0bBFeJvU45DqfZAiqCuplQC00G92hcOAZChINt6TJQxuAehClhABkR9wvkgENRnmecUMqw5wrYCQZCB48zD32U7reTZC3cl5imCaSkHsKXq0aZBj5auHkZCZAJcoY0gNnqd7");
+  const { company } = useCurrentCompany();
+  
+  // States
+  const [tempAccessToken, setTempAccessToken] = useState("");
   const [selectedPageId, setSelectedPageId] = useState("");
   const [showAddPageForm, setShowAddPageForm] = useState(false);
-  const [settings, setSettings] = useState({
-    autoReply: true,
-    notificationsEnabled: true,
-    responseDelay: 5,
-    workingHours: {
-      enabled: true,
-      start: "09:00",
-      end: "18:00"
+  const [isTestingConnection, setIsTestingConnection] = useState(false);
+  const [isConnectingPage, setIsConnectingPage] = useState(false);
+  const [accessToken, setAccessToken] = useState("");
+  const [isConnected, setIsConnected] = useState(false);
+  const [pages, setPages] = useState([]);
+  const [isLoadingPages, setIsLoadingPages] = useState(false);
+  const [connectedPages, setConnectedPages] = useState([]);
+  const [isLoadingConnectedPages, setIsLoadingConnectedPages] = useState(false);
+
+  // Load connected pages for current company ONLY
+  const loadConnectedPages = async () => {
+    if (!company?.id) {
+      console.log('❌ No company ID, clearing connected pages');
+      setConnectedPages([]);
+      return;
     }
-  });
+    
+    setIsLoadingConnectedPages(true);
+    try {
+      console.log('🔍 Loading pages for company:', company.id, company.name);
+      
+      const { data, error } = await supabase
+        .from('facebook_settings')
+        .select('*')
+        .eq('company_id', company.id)
+        .order('created_at', { ascending: false });
 
-  const {
-    accessToken,
-    isConnected,
-    isLoadingSettings,
-    savedSettings,
-    pages,
-    isLoadingPages,
-    pagesError,
-    connectedPages,
-    isLoadingConnectedPages,
-    setAccessToken,
-    testConnection,
-    connectPage,
-    disconnect,
-    disconnectPage,
-    deletePage,
-    reactivatePage,
-    resetForNewConnection,
-    isTestingConnection,
-    isConnectingPage,
-    isDisconnectingPage,
-    isDeletingPage,
-    isReactivatingPage,
-  } = useFacebookApi();
-
-  const handleSaveSettings = () => {
-    toast({
-      title: "تم حفظ الإعدادات",
-      description: "تم حفظ جميع الإعدادات بنجاح",
-    });
+      if (error) {
+        console.error('❌ Error loading connected pages:', error);
+        setConnectedPages([]);
+      } else {
+        console.log('✅ Raw data from database:', data);
+        console.log('✅ Loaded connected pages for company', company.name, ':', data?.length || 0);
+        setConnectedPages(data || []);
+      }
+    } catch (error) {
+      console.error('❌ Exception loading connected pages:', error);
+      setConnectedPages([]);
+    } finally {
+      setIsLoadingConnectedPages(false);
+    }
   };
 
-  const handleTestConnection = () => {
+  // Load connected pages on component mount and company change
+  useEffect(() => {
+    console.log('🔄 Settings useEffect triggered, company:', company?.id, company?.name);
+    loadConnectedPages();
+  }, [company?.id]);
+
+  // Test Facebook connection
+  const handleTestConnection = async () => {
     if (!tempAccessToken.trim()) {
       toast({
         title: "خطأ",
-        description: "يرجى إدخال رمز الوصول",
+        description: "يرجى إدخال Access Token أولاً",
         variant: "destructive",
       });
       return;
     }
-    testConnection.mutate(tempAccessToken);
+
+    setIsTestingConnection(true);
+    setIsLoadingPages(true);
+    
+    try {
+      console.log('🧪 Testing Facebook connection...');
+      
+      // Test token by getting page info
+      const response = await fetch(
+        `https://graph.facebook.com/v18.0/me?access_token=${tempAccessToken}`
+      );
+      
+      const data = await response.json();
+      
+      if (data.error) {
+        throw new Error(data.error.message);
+      }
+
+      console.log('✅ Facebook API response:', data);
+
+      // If it's a page token, get page info directly
+      const pageInfo = {
+        id: data.id,
+        name: data.name,
+        access_token: tempAccessToken
+      };
+
+      setPages([pageInfo]);
+      setAccessToken(tempAccessToken);
+      setIsConnected(true);
+      
+      toast({
+        title: "تم الاتصال بنجاح",
+        description: `تم العثور على الصفحة: ${data.name}`,
+      });
+      
+    } catch (error) {
+      console.error('❌ Connection test failed:', error);
+      toast({
+        title: "فشل الاتصال",
+        description: error.message || "تأكد من صحة Access Token",
+        variant: "destructive",
+      });
+      setPages([]);
+      setAccessToken("");
+      setIsConnected(false);
+    } finally {
+      setIsTestingConnection(false);
+      setIsLoadingPages(false);
+    }
   };
 
-  const handleConnectPage = () => {
-    if (!selectedPageId) {
+  // Connect selected page
+  const handleConnectPage = async () => {
+    if (!selectedPageId || !company?.id) {
       toast({
         title: "خطأ",
-        description: "يرجى اختيار صفحة",
+        description: "يرجى اختيار صفحة أولاً",
         variant: "destructive",
       });
       return;
     }
 
-    const selectedPage = pages.find(page => page.id === selectedPageId);
+    const selectedPage = pages.find(p => p.id === selectedPageId);
     if (!selectedPage) return;
 
-    connectPage.mutate({
-      pageId: selectedPage.id,
-      pageAccessToken: selectedPage.access_token,
-      pageName: selectedPage.name,
-    }, {
-      onSuccess: () => {
-        // إخفاء الـ form بعد النجاح
-        setShowAddPageForm(false);
-        setTempAccessToken("");
-        setSelectedPageId("");
-      }
-    });
-  };
+    setIsConnectingPage(true);
 
-  const handleDisconnect = () => {
-    disconnect.mutate();
-  };
+    try {
+      console.log('🔗 Connecting page:', selectedPage.name, 'to company:', company.id);
 
-  const handleDisconnectPage = (pageId: string, pageName: string) => {
-    if (window.confirm(`هل أنت متأكد من قطع الاتصال مع صفحة "${pageName}"؟\n\n⚠️ سيتم:\n- إيقاف استقبال الرسائل مؤقتاً\n- إزالة الـ Access Token مؤقتاً\n- يمكن إعادة التفعيل لاحقاً بدون إعادة ربط`)) {
-      disconnectPage.mutate(pageId);
-    }
-  };
+      // Check if page already exists
+      const { data: existingPage } = await supabase
+        .from('facebook_settings')
+        .select('id')
+        .eq('page_id', selectedPage.id)
+        .single();
 
-  const handleDeletePage = (pageId: string, pageName: string) => {
-    if (window.confirm(`⚠️ تحذير: هل أنت متأكد من حذف صفحة "${pageName}" نهائياً؟\n\nسيتم حذف جميع الإعدادات والبيانات المرتبطة بهذه الصفحة ولا يمكن التراجع عن هذا الإجراء!`)) {
-      if (window.confirm(`تأكيد نهائي: اكتب "نعم" للمتابعة أو ألغِ العملية.`)) {
-        deletePage.mutate(pageId);
-      }
-    }
-  };
+      let error;
 
-  const handleReactivatePage = (pageId: string, pageName: string) => {
-    if (window.confirm(`هل تريد إعادة تفعيل صفحة "${pageName}"؟\n\n✅ سيتم:\n- استئناف استقبال الرسائل\n- إرجاع الـ Access Token المحفوظ\n- تفعيل جميع الوظائف`)) {
-      reactivatePage.mutate(pageId);
-    }
-  };
+      if (existingPage) {
+        // Update existing page
+        console.log('📝 Updating existing page...');
+        const { error: updateError } = await supabase
+          .from('facebook_settings')
+          .update({
+            page_name: selectedPage.name,
+            access_token: selectedPage.access_token,
+            company_id: company.id,
+            is_active: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('page_id', selectedPage.id);
 
-  // 🔧 التحكم الذكي في الـ Webhook
-  const handleToggleWebhook = async (pageId: string, pageName: string, enabled: boolean) => {
-    const action = enabled ? 'تشغيل' : 'إيقاف';
-    const confirmMessage = enabled
-      ? `هل أنت متأكد من تشغيل استقبال الرسائل لصفحة "${pageName}"؟\n\n✅ سيتم:\n- تشغيل الـ webhook\n- بدء استقبال الرسائل فور سؤال`
-      : `هل أنت متأكد من إيقاف استقبال الرسائل لصفحة "${pageName}"؟\n\n⚠️ سيتم:\n- إيقاف الـ webhook\n- توقف استقبال الرسائل فور سؤال\n- الصفحة ستبقى مربوطة`;
-
-    if (window.confirm(confirmMessage)) {
-      try {
-        const response = await fetch(`/api/facebook/webhook/${pageId}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ enabled }),
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-          toast({
-            title: `تم ${action} الـ webhook بنجاح`,
-            description: `تم ${action} استقبال الرسائل لصفحة ${pageName}`,
+        error = updateError;
+      } else {
+        // Insert new page
+        console.log('➕ Inserting new page...');
+        const { error: insertError } = await supabase
+          .from('facebook_settings')
+          .insert({
+            page_id: selectedPage.id,
+            page_name: selectedPage.name,
+            access_token: selectedPage.access_token,
+            company_id: company.id,
+            is_active: true,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
           });
 
-          // إعادة تحميل الصفحات
-          window.location.reload();
-        } else {
-          throw new Error(result.error || `فشل في ${action} الـ webhook`);
-        }
-      } catch (error: any) {
-        toast({
-          title: `خطأ في ${action} الـ webhook`,
-          description: error.message || `حدث خطأ أثناء ${action} الـ webhook`,
-          variant: "destructive",
-        });
+        error = insertError;
       }
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('✅ Page connected successfully');
+
+      toast({
+        title: "تم ربط الصفحة بنجاح",
+        description: `تم ربط صفحة: ${selectedPage.name}`,
+      });
+
+      // Reset form and reload connected pages
+      setTempAccessToken("");
+      setSelectedPageId("");
+      setShowAddPageForm(false);
+      setAccessToken("");
+      setIsConnected(false);
+      setPages([]);
+
+      await loadConnectedPages();
+
+    } catch (error) {
+      console.error('❌ Error connecting page:', error);
+      toast({
+        title: "فشل في ربط الصفحة",
+        description: error.message || "حدث خطأ أثناء ربط الصفحة",
+        variant: "destructive",
+      });
+    } finally {
+      setIsConnectingPage(false);
+    }
+  };
+
+  // Disconnect page
+  const handleDisconnectPage = async (pageId: string) => {
+    try {
+      console.log('🔌 Disconnecting page:', pageId, 'from company:', company?.id);
+      
+      const { error } = await supabase
+        .from('facebook_settings')
+        .delete()
+        .eq('page_id', pageId)
+        .eq('company_id', company?.id);
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('✅ Page disconnected successfully');
+
+      toast({
+        title: "تم قطع الاتصال",
+        description: "تم قطع اتصال الصفحة بنجاح",
+      });
+
+      await loadConnectedPages();
+      
+    } catch (error) {
+      console.error('❌ Error disconnecting page:', error);
+      toast({
+        title: "فشل في قطع الاتصال",
+        description: error.message || "حدث خطأ أثناء قطع الاتصال",
+        variant: "destructive",
+      });
     }
   };
 
   return (
-    <div className="h-full bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 overflow-y-auto" dir="rtl">
-      <div className="container mx-auto px-6 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">الإعدادات</h1>
-          <p className="text-gray-600">إدارة إعدادات الحساب والردود الآلية</p>
+    <div className="container mx-auto p-6 space-y-8">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">إعدادات Facebook</h1>
+          <p className="text-gray-600 mt-2">إدارة إعدادات الحساب والردود الآلية</p>
+          {company && (
+            <p className="text-sm text-blue-600 mt-1">
+              🏢 الشركة الحالية: {company.name} ({company.id})
+            </p>
+          )}
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Facebook Connection */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center space-x-2 space-x-reverse">
-                  <Facebook className="w-5 h-5 text-blue-600" />
-                  <span>ربط صفحات فيسبوك</span>
-                </div>
-                {connectedPages.length > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      // إعادة تعيين الحالة المحلية فقط
-                      setTempAccessToken("");
-                      setSelectedPageId("");
-                      setShowAddPageForm(true);
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Facebook Connection */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center justify-between">
+              <div className="flex items-center space-x-2 space-x-reverse">
+                <Facebook className="w-5 h-5 text-blue-600" />
+                <span>ربط صفحات فيسبوك</span>
+              </div>
+              {connectedPages.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowAddPageForm(true)}
+                  className="bg-blue-600 text-white hover:bg-blue-700 border-blue-600"
+                >
+                  <Facebook className="w-4 h-4 ml-2" />
+                  إضافة صفحة
+                </Button>
+              )}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Debug Info */}
+            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs">
+              <p><strong>🔍 معلومات التشخيص:</strong></p>
+              <p>• الشركة: {company?.name || 'غير محددة'} ({company?.id || 'لا يوجد ID'})</p>
+              <p>• عدد الصفحات المحملة: {connectedPages.length}</p>
+              <p>• حالة التحميل: {isLoadingConnectedPages ? 'جاري التحميل...' : 'مكتمل'}</p>
+            </div>
 
-                      // إظهار رسالة توضيحية
-                      toast({
-                        title: "جاهز لربط صفحة جديدة",
-                        description: "أدخل Access Token جديد لربط صفحة أخرى",
-                      });
-                    }}
-                    className="bg-blue-600 text-white hover:bg-blue-700 border-blue-600"
-                  >
-                    <Facebook className="w-4 h-4 ml-2" />
-                    إضافة صفحة
-                  </Button>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              {isLoadingSettings ? (
-                <div className="flex items-center justify-center p-8">
-                  <Loader2 className="w-6 h-6 animate-spin ml-2" />
-                  <span>تحميل الإعدادات...</span>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                  <div className="flex items-center space-x-3 space-x-reverse">
-                    <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
-                      <Facebook className="w-5 h-5 text-white" />
+            {/* Connected Pages List */}
+            {isLoadingConnectedPages ? (
+              <div className="flex items-center justify-center p-8">
+                <Loader2 className="w-6 h-6 animate-spin ml-2" />
+                <span>تحميل الصفحات...</span>
+              </div>
+            ) : connectedPages.length > 0 ? (
+              <div className="space-y-4">
+                <h3 className="font-medium">الصفحات المربوطة ({connectedPages.length}):</h3>
+                {connectedPages.map((page) => (
+                  <div key={page.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
+                    <div className="flex items-center space-x-3 space-x-reverse">
+                      <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
+                        <Facebook className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <h4 className="font-medium">{page.page_name}</h4>
+                        <p className="text-sm text-gray-600">ID: {page.page_id}</p>
+                        <p className="text-xs text-gray-500">تاريخ الإضافة: {new Date(page.created_at).toLocaleDateString('ar-EG')}</p>
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-medium">صفحات الفيسبوك</h3>
-                      <p className="text-sm text-gray-600">
-                        {connectedPages.length > 0 ?
-                          `متصل - ${connectedPages.length} صفحة مربوطة` :
-                          isConnected && savedSettings ?
-                          `متصل - ${savedSettings.page_name || 'صفحة غير محددة'}` :
-                          "يمكنك ربط عدة صفحات فيسبوك"
-                        }
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center space-x-2 space-x-reverse">
-                    <Badge variant={connectedPages.length > 0 || isConnected ? "default" : "secondary"} className={
-                      connectedPages.length > 0 || isConnected ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                    }>
-                      {connectedPages.length > 0 || isConnected ? (
-                        <><CheckCircle className="w-3 h-3 ml-1" /> متصل</>
-                      ) : (
-                        <><AlertCircle className="w-3 h-3 ml-1" /> غير متصل</>
-                      )}
-                    </Badge>
-                    {(connectedPages.length > 0 || isConnected) && (
+                    <div className="flex items-center space-x-2 space-x-reverse">
+                      <Badge variant="default" className="bg-green-100 text-green-800">
+                        <CheckCircle className="w-3 h-3 ml-1" />
+                        متصل
+                      </Badge>
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={handleDisconnect}
+                        onClick={() => handleDisconnectPage(page.page_id)}
                         className="text-red-600 hover:text-red-700"
                       >
-                        قطع الاتصال
+                        <Trash2 className="w-4 h-4" />
                       </Button>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {(!isConnected || !savedSettings || showAddPageForm) && (
-                <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="font-medium text-yellow-800">ربط صفحات فيسبوك</h4>
-                    {showAddPageForm && connectedPages.length > 0 && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setShowAddPageForm(false);
-                          setTempAccessToken("");
-                          setSelectedPageId("");
-                        }}
-                        className="text-gray-500 hover:text-gray-700"
-                      >
-                        ✕ إلغاء
-                      </Button>
-                    )}
-                  </div>
-                  <p className="text-sm text-yellow-700 mb-4">
-                    يمكنك ربط عدة صفحات فيسبوك لإدارة جميع المحادثات من مكان واحد
-                  </p>
-
-                  <div className="space-y-4">
-                    {(!isConnected || showAddPageForm) && (
-                      <div>
-                        <Label htmlFor="access-token">رمز الوصول (Access Token)</Label>
-                        <div className="flex space-x-2 space-x-reverse mt-1">
-                          <Input
-                            id="access-token"
-                            type="password"
-                            placeholder="أدخل رمز الوصول الخاص بك..."
-                            value={tempAccessToken}
-                            onChange={(e) => setTempAccessToken(e.target.value)}
-                            className="flex-1"
-                          />
-                          <Button
-                            variant="outline"
-                            onClick={handleTestConnection}
-                            disabled={isTestingConnection || !tempAccessToken.trim()}
-                          >
-                            {isTestingConnection ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
-                            ) : (
-                              <Key className="w-4 h-4" />
-                            )}
-                          </Button>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1">
-                          احصل على الـ Access Token من Facebook Developer Console
-                        </p>
-                      </div>
-                    )}
-
-                    {isConnected && (showAddPageForm || !savedSettings) && (
-                      <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                        <p className="text-sm text-green-700">
-                          ✅ تم الاتصال بنجاح! الآن اختر الصفحة التي تريد ربطها.
-                        </p>
-                      </div>
-                    )}
-
-                    {pages.length > 0 && (showAddPageForm || !savedSettings) && (
-                      <div>
-                        <Label htmlFor="page-select">اختر الصفحة</Label>
-                        <Select value={selectedPageId} onValueChange={setSelectedPageId}>
-                          <SelectTrigger className="mt-1">
-                            <SelectValue placeholder="اختر صفحة للربط..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {pages.map((page) => (
-                              <SelectItem key={page.id} value={page.id}>
-                                {page.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
-
-                    {pages.length > 0 && (showAddPageForm || !savedSettings) && (
-                      <Button
-                        className="bg-blue-600 hover:bg-blue-700 w-full"
-                        onClick={handleConnectPage}
-                        disabled={isConnectingPage || !selectedPageId}
-                      >
-                        {isConnectingPage ? (
-                          <Loader2 className="w-4 h-4 animate-spin ml-2" />
-                        ) : (
-                          <Facebook className="w-4 h-4 ml-2" />
-                        )}
-                        ربط هذه الصفحة
-                      </Button>
-                    )}
-
-                    {pagesError && (showAddPageForm || !savedSettings) && (
-                      <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                        <p className="text-sm text-red-700">
-                          خطأ: {pagesError.message}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* عرض الصفحات المربوطة */}
-              {connectedPages.length > 0 && (
-                <div className="space-y-4">
-                  <h4 className="font-medium text-gray-800 mb-3">الصفحات المربوطة ({connectedPages.length})</h4>
-                  {connectedPages.map((page, index) => {
-                    const isActive = page.is_active !== false;
-                    const isDisconnected = page.disconnected_at;
-                    const hasAccessToken = page.has_access_token;
-                    const hasBackupToken = page.has_backup_token;
-                    const canReactivate = page.can_reactivate;
-
-                    return (
-                      <div key={page.id} className={`p-4 border rounded-lg ${
-                        isActive ? 'bg-green-50 border-green-200' : 'bg-gray-50 border-gray-200'
-                      }`}>
-                        <div className="flex items-center justify-between">
-                          <div className="space-y-2 text-sm">
-                            <p className={isActive ? 'text-green-700' : 'text-gray-600'}>
-                              <strong>الصفحة:</strong> {page.page_name}
-                            </p>
-                            <p className={isActive ? 'text-green-700' : 'text-gray-600'}>
-                              <strong>معرف الصفحة:</strong> {page.page_id}
-                            </p>
-                            <p className={isActive ? 'text-green-700' : 'text-gray-600'}>
-                              <strong>تاريخ الربط:</strong> {new Date(page.created_at).toLocaleDateString('ar-EG')}
-                            </p>
-                            {isDisconnected && (
-                              <p className="text-gray-500">
-                                <strong>تاريخ قطع الاتصال:</strong> {new Date(page.disconnected_at).toLocaleDateString('ar-EG')}
-                              </p>
-                            )}
-                            <div className="flex items-center space-x-2 space-x-reverse">
-                              <span className="text-xs">
-                                <strong>Access Token:</strong>
-                              </span>
-                              {hasAccessToken ? (
-                                <Badge variant="default" className="bg-green-100 text-green-700 text-xs">
-                                  متوفر
-                                </Badge>
-                              ) : hasBackupToken ? (
-                                <Badge variant="secondary" className="bg-yellow-100 text-yellow-700 text-xs">
-                                  محفوظ احتياطي
-                                </Badge>
-                              ) : (
-                                <Badge variant="destructive" className="bg-red-100 text-red-700 text-xs">
-                                  غير متوفر
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center space-x-2 space-x-reverse">
-                            {/* حالة الصفحة */}
-                            <Badge variant={isActive ? "default" : "secondary"} className={
-                              isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"
-                            }>
-                              {isActive ? (
-                                <><CheckCircle className="w-3 h-3 ml-1" /> نشط</>
-                              ) : (
-                                <><Power className="w-3 h-3 ml-1" /> معطل</>
-                              )}
-                            </Badge>
-
-                            {/* بادج الصفحة الرئيسية */}
-                            {index === 0 && (
-                              <Badge variant="secondary" className="bg-blue-100 text-blue-800">
-                                الرئيسية
-                              </Badge>
-                            )}
-
-                            {/* أزرار التحكم الذكي */}
-                            <div className="flex items-center space-x-1 space-x-reverse">
-                              {isActive && hasAccessToken ? (
-                                <>
-                                  {/* إيقاف الرسائل */}
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleToggleWebhook(page.page_id, page.page_name, false)}
-                                    className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                                    title="إيقاف استقبال الرسائل مؤقتاً"
-                                  >
-                                    <Power className="w-3 h-3" />
-                                  </Button>
-
-                                  {/* قطع الاتصال */}
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleDisconnectPage(page.page_id, page.page_name)}
-                                    disabled={isDisconnectingPage}
-                                    className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                                    title="قطع الاتصال مؤقتاً"
-                                  >
-                                    {isDisconnectingPage ? (
-                                      <Loader2 className="w-3 h-3 animate-spin" />
-                                    ) : (
-                                      <Unplug className="w-3 h-3" />
-                                    )}
-                                  </Button>
-
-                                  {/* حذف نهائي */}
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleDeletePage(page.page_id, page.page_name)}
-                                    disabled={isDeletingPage}
-                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                    title="حذف نهائي"
-                                  >
-                                    {isDeletingPage ? (
-                                      <Loader2 className="w-3 h-3 animate-spin" />
-                                    ) : (
-                                      <Trash2 className="w-3 h-3" />
-                                    )}
-                                  </Button>
-                                </>
-                              ) : canReactivate ? (
-                                <>
-                                  {/* تشغيل الرسائل */}
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleToggleWebhook(page.page_id, page.page_name, true)}
-                                    className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                                    title="تشغيل استقبال الرسائل"
-                                  >
-                                    <Power className="w-3 h-3" />
-                                  </Button>
-
-                                  {/* إعادة تفعيل */}
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleReactivatePage(page.page_id, page.page_name)}
-                                    disabled={isReactivatingPage}
-                                    className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                                    title="إعادة تفعيل"
-                                  >
-                                    {isReactivatingPage ? (
-                                      <Loader2 className="w-3 h-3 animate-spin" />
-                                    ) : (
-                                      <RotateCcw className="w-3 h-3" />
-                                    )}
-                                  </Button>
-
-                                  {/* حذف نهائي */}
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleDeletePage(page.page_id, page.page_name)}
-                                    disabled={isDeletingPage}
-                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                    title="حذف نهائي"
-                                  >
-                                    {isDeletingPage ? (
-                                      <Loader2 className="w-3 h-3 animate-spin" />
-                                    ) : (
-                                      <Trash2 className="w-3 h-3" />
-                                    )}
-                                  </Button>
-                                </>
-                              ) : (
-                                <>
-                                  {/* إعادة ربط مطلوبة */}
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => {
-                                      toast({
-                                        title: "إعادة ربط مطلوبة",
-                                        description: "هذه الصفحة تحتاج إعادة ربط كاملة. يرجى حذفها وإضافتها مرة أخرى.",
-                                        variant: "destructive",
-                                      });
-                                    }}
-                                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                    title="إعادة ربط مطلوبة"
-                                  >
-                                    <AlertTriangle className="w-3 h-3" />
-                                  </Button>
-
-                                  {/* حذف نهائي */}
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleDeletePage(page.page_id, page.page_name)}
-                                    disabled={isDeletingPage}
-                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                    title="حذف نهائي"
-                                  >
-                                    {isDeletingPage ? (
-                                      <Loader2 className="w-3 h-3 animate-spin" />
-                                    ) : (
-                                      <Trash2 className="w-3 h-3" />
-                                    )}
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* مؤشر حالة الـ Webhook */}
-                        <div className="mt-3 p-2 border rounded text-sm">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center">
-                              <div className={`w-2 h-2 rounded-full ml-2 ${
-                                isActive && page.webhook_enabled !== false ? 'bg-green-500' : 'bg-red-500'
-                              }`}></div>
-                              <span className="font-medium">حالة الـ Webhook:</span>
-                            </div>
-                            <Badge variant={isActive && page.webhook_enabled !== false ? "default" : "secondary"} className={
-                              isActive && page.webhook_enabled !== false ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                            }>
-                              {isActive && page.webhook_enabled !== false ? "نشط - يستقبل رسائل" : "معطل - لا يستقبل رسائل"}
-                            </Badge>
-                          </div>
-                        </div>
-
-                        {/* تحذير للصفحات المعطلة */}
-                        {!isActive && (
-                          <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm">
-                            <div className="flex items-center text-yellow-700">
-                              <AlertTriangle className="w-4 h-4 ml-2" />
-                              <span>هذه الصفحة معطلة ولا تستقبل رسائل جديدة</span>
-                            </div>
-                            <div className="mt-1 text-xs text-yellow-600">
-                              {hasBackupToken ?
-                                "تم إزالة الـ Access Token مؤقتاً - يمكن إعادة التفعيل" :
-                                "لا يوجد Access Token محفوظ - يتطلب إعادة ربط كاملة"
-                              }
-                            </div>
-                          </div>
-                        )}
-
-                        {/* تحذير للصفحات بدون Access Token */}
-                        {!hasAccessToken && !hasBackupToken && isActive && (
-                          <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded text-sm">
-                            <div className="flex items-center text-red-700">
-                              <AlertTriangle className="w-4 h-4 ml-2" />
-                              <span>هذه الصفحة بدون Access Token ولا تعمل</span>
-                            </div>
-                            <div className="mt-1 text-xs text-red-600">
-                              يرجى حذف الصفحة وإعادة ربطها مرة أخرى
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {isConnected && savedSettings && connectedPages.length === 0 && (
-                <div className="space-y-4">
-                  <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <h4 className="font-medium text-green-800 mb-2">تم الربط بنجاح!</h4>
-                    <div className="space-y-2 text-sm text-green-700">
-                      <p><strong>الصفحة:</strong> {savedSettings.page_name}</p>
-                      <p><strong>معرف الصفحة:</strong> {savedSettings.page_id}</p>
-                      <p><strong>تاريخ الربط:</strong> {new Date(savedSettings.created_at).toLocaleDateString('ar-EG')}</p>
                     </div>
                   </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center p-8">
+                <Facebook className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">لا توجد صفحات مربوطة</h3>
+                <p className="text-gray-600 mb-4">ابدأ بربط صفحة Facebook الأولى</p>
+                <Button
+                  onClick={() => setShowAddPageForm(true)}
+                  className="bg-blue-600 hover:bg-blue-700"
+                >
+                  <Facebook className="w-4 h-4 ml-2" />
+                  ربط صفحة جديدة
+                </Button>
+              </div>
+            )}
 
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <h4 className="font-medium text-blue-800 mb-2">💡 ربط صفحات إضافية</h4>
-                    <p className="text-sm text-blue-700 mb-3">
-                      لربط صفحات إضافية، كرر نفس العملية: أدخل Access Token جديد واختر صفحة أخرى.
-                      ستظهر جميع المحادثات من الصفحات المربوطة في صفحة المحادثات.
-                    </p>
+            {/* Add Page Form */}
+            {(showAddPageForm || connectedPages.length === 0) && (
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-medium text-yellow-800">ربط صفحة Facebook جديدة</h4>
+                  {showAddPageForm && connectedPages.length > 0 && (
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
                       onClick={() => {
-                        // إعادة تعيين الحالة المحلية فقط
+                        setShowAddPageForm(false);
                         setTempAccessToken("");
                         setSelectedPageId("");
-                        setShowAddPageForm(true);
-
-                        // إظهار رسالة توضيحية
-                        toast({
-                          title: "جاهز لربط صفحة جديدة",
-                          description: "أدخل Access Token جديد لربط صفحة أخرى",
-                        });
+                        setAccessToken("");
+                        setIsConnected(false);
+                        setPages([]);
                       }}
-                      className="w-full bg-blue-600 text-white hover:bg-blue-700 border-blue-600"
+                      className="text-gray-500 hover:text-gray-700"
                     >
-                      <Facebook className="w-4 h-4 ml-2" />
-                      ربط صفحة جديدة
+                      ✕ إلغاء
                     </Button>
+                  )}
+                </div>
+
+                <div className="space-y-4">
+                  {/* Access Token Input */}
+                  <div>
+                    <Label htmlFor="access-token">رمز الوصول (Access Token)</Label>
+                    <div className="flex space-x-2 space-x-reverse mt-1">
+                      <Input
+                        id="access-token"
+                        type="password"
+                        placeholder="أدخل رمز الوصول الخاص بك..."
+                        value={tempAccessToken}
+                        onChange={(e) => setTempAccessToken(e.target.value)}
+                        className="flex-1"
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={handleTestConnection}
+                        disabled={isTestingConnection || !tempAccessToken.trim()}
+                      >
+                        {isTestingConnection ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <Key className="w-4 h-4" />
+                        )}
+                      </Button>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      احصل على الـ Access Token من Facebook Developer Console
+                    </p>
                   </div>
 
-                  <div>
-                    <Label htmlFor="webhook-url">رابط Webhook</Label>
-                    <div className="space-y-3 mt-1">
-                      <Input
-                        id="webhook-url"
-                        placeholder="https://your-domain.com:3001/webhook"
-                        value={savedSettings.webhook_url || 'http://localhost:3001/webhook'}
-                        className="font-mono text-sm"
-                        readOnly
-                      />
+                  {/* Success Message */}
+                  {isConnected && (
+                    <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                      <p className="text-sm text-green-700">
+                        ✅ تم الاتصال بنجاح! الآن اختر الصفحة التي تريد ربطها.
+                      </p>
+                    </div>
+                  )}
 
-                      <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                        <h4 className="font-medium text-blue-800 mb-2">إعداد Webhook:</h4>
-                        <div className="space-y-2 text-sm text-blue-700">
-                          <div className="flex items-center justify-between">
-                            <span>URL:</span>
-                            <code className="bg-blue-100 px-2 py-1 rounded text-xs">
-                              http://localhost:3001/webhook
-                            </code>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span>Verify Token:</span>
-                            <code className="bg-blue-100 px-2 py-1 rounded text-xs">
-                              facebook_webhook_verify_token_2024
-                            </code>
-                          </div>
-                          <div className="flex items-center justify-between">
-                            <span>Events:</span>
-                            <span className="text-xs">messages, messaging_postbacks</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                        <h4 className="font-medium text-yellow-800 mb-2">خطوات التفعيل:</h4>
-                        <ol className="text-sm text-yellow-700 space-y-1 list-decimal list-inside">
-                          <li>شغل خادم Webhook: <code className="bg-yellow-100 px-1 rounded">npm run webhook</code></li>
-                          <li>استخدم ngrok للوصول العام: <code className="bg-yellow-100 px-1 rounded">ngrok http 3001</code></li>
-                          <li>أضف URL في Facebook Developer Console</li>
-                          <li>اشترك في الأحداث: messages, messaging_postbacks</li>
-                        </ol>
+                  {/* Loading Pages */}
+                  {isLoadingPages && (
+                    <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-center space-x-2 space-x-reverse">
+                        <Loader2 className="w-4 h-4 animate-spin text-blue-600" />
+                        <p className="text-sm text-blue-800">جاري تحميل الصفحات المتاحة...</p>
                       </div>
                     </div>
-                  </div>
-                </div>
-              )}
+                  )}
 
-              {/* زر إضافة صفحة جديدة عند عدم وجود صفحات */}
-              {connectedPages.length === 0 && !isConnected && !savedSettings && (
-                <div className="text-center p-8 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg">
-                  <Facebook className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">لا توجد صفحات مربوطة</h3>
-                  <p className="text-gray-600 mb-4">ابدأ بربط أول صفحة فيسبوك</p>
-                  <Button
-                    onClick={() => {
-                      // إعادة تعيين الحالة المحلية فقط
-                      setTempAccessToken("");
-                      setSelectedPageId("");
-                      setShowAddPageForm(true);
+                  {/* Page Selection */}
+                  {pages.length > 0 && (
+                    <div>
+                      <Label htmlFor="page-select">اختر الصفحة</Label>
+                      <Select value={selectedPageId} onValueChange={setSelectedPageId}>
+                        <SelectTrigger className="mt-1">
+                          <SelectValue placeholder="اختر صفحة للربط..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {pages.map((page) => (
+                            <SelectItem key={page.id} value={page.id}>
+                              {page.name} (ID: {page.id})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
 
-                      // إظهار رسالة توضيحية
-                      toast({
-                        title: "ابدأ ربط صفحة فيسبوك",
-                        description: "أدخل Access Token لربط أول صفحة",
-                      });
-                    }}
-                    className="bg-blue-600 hover:bg-blue-700"
-                  >
-                    <Facebook className="w-4 h-4 ml-2" />
-                    ربط صفحة فيسبوك
-                  </Button>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-
-
-          {/* Quick Access to AI Settings */}
-          <Card className="lg:col-span-3">
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2 space-x-reverse">
-                <Bot className="w-5 h-5 text-purple-600" />
-                <span>إعدادات الذكاء الاصطناعي</span>
-              </CardTitle>
-              <CardDescription>
-                الوصول السريع لإعدادات Gemini AI للمنصات المختلفة
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <MessageSquare className="w-5 h-5 text-green-600" />
-                      إعدادات الواتساب
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-gray-600 mb-4">
-                      تكوين Gemini AI للرد التلقائي على رسائل WhatsApp
-                    </p>
+                  {/* Connect Button */}
+                  {pages.length > 0 && (
                     <Button
-                      onClick={() => window.location.href = '/whatsapp-gemini-settings'}
-                      className="w-full"
+                      className="bg-blue-600 hover:bg-blue-700 w-full"
+                      onClick={handleConnectPage}
+                      disabled={isConnectingPage || !selectedPageId}
                     >
-                      فتح إعدادات الواتساب
+                      {isConnectingPage ? (
+                        <Loader2 className="w-4 h-4 animate-spin ml-2" />
+                      ) : (
+                        <Facebook className="w-4 h-4 ml-2" />
+                      )}
+                      ربط هذه الصفحة
                     </Button>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2 text-lg">
-                      <Facebook className="w-5 h-5 text-blue-600" />
-                      إعدادات الفيسبوك
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-sm text-gray-600 mb-4">
-                      تكوين Gemini AI للرد التلقائي على رسائل وتعليقات Facebook
-                    </p>
-                    <Button
-                      onClick={() => window.location.href = '/facebook-ai-settings'}
-                      className="w-full"
-                      variant="outline"
-                    >
-                      فتح إعدادات الفيسبوك
-                    </Button>
-                  </CardContent>
-                </Card>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Quick Settings */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2 space-x-reverse">
-                <Shield className="w-5 h-5 text-green-600" />
-                <span>إعدادات سريعة</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-medium">الرد الآلي</h4>
-                  <p className="text-sm text-gray-600">تفعيل الردود الآلية</p>
+                  )}
                 </div>
-                <Switch
-                  checked={settings.autoReply}
-                  onCheckedChange={(checked) =>
-                    setSettings(prev => ({ ...prev, autoReply: checked }))
-                  }
-                />
               </div>
+            )}
+          </CardContent>
+        </Card>
 
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-medium">الإشعارات</h4>
-                  <p className="text-sm text-gray-600">تلقي إشعارات الرسائل</p>
-                </div>
-                <Switch
-                  checked={settings.notificationsEnabled}
-                  onCheckedChange={(checked) =>
-                    setSettings(prev => ({ ...prev, notificationsEnabled: checked }))
-                  }
-                />
-              </div>
-
-              <div className="flex items-center justify-between">
-                <div>
-                  <h4 className="font-medium">أوقات العمل</h4>
-                  <p className="text-sm text-gray-600">الرد خلال أوقات محددة</p>
-                </div>
-                <Switch
-                  checked={settings.workingHours.enabled}
-                  onCheckedChange={(checked) =>
-                    setSettings(prev => ({
-                      ...prev,
-                      workingHours: { ...prev.workingHours, enabled: checked }
-                    }))
-                  }
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Response Settings */}
-          <Card className="lg:col-span-2">
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2 space-x-reverse">
-                <Clock className="w-5 h-5 text-purple-600" />
-                <span>إعدادات الردود</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <div>
-                <Label htmlFor="response-delay">تأخير الرد (بالثواني)</Label>
-                <Input
-                  id="response-delay"
-                  type="number"
-                  min="0"
-                  max="60"
-                  value={settings.responseDelay}
-                  onChange={(e) =>
-                    setSettings(prev => ({ ...prev, responseDelay: parseInt(e.target.value) }))
-                  }
-                  className="mt-1"
-                />
-                <p className="text-sm text-gray-600 mt-1">
-                  الوقت بالثواني قبل إرسال الرد الآلي
-                </p>
-              </div>
-
-              {settings.workingHours.enabled && (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="work-start">بداية العمل</Label>
-                    <Input
-                      id="work-start"
-                      type="time"
-                      value={settings.workingHours.start}
-                      onChange={(e) =>
-                        setSettings(prev => ({
-                          ...prev,
-                          workingHours: { ...prev.workingHours, start: e.target.value }
-                        }))
-                      }
-                      className="mt-1"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="work-end">نهاية العمل</Label>
-                    <Input
-                      id="work-end"
-                      type="time"
-                      value={settings.workingHours.end}
-                      onChange={(e) =>
-                        setSettings(prev => ({
-                          ...prev,
-                          workingHours: { ...prev.workingHours, end: e.target.value }
-                        }))
-                      }
-                      className="mt-1"
-                    />
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <Label htmlFor="default-response">الرد الافتراضي</Label>
-                <Textarea
-                  id="default-response"
-                  placeholder="الرد الذي سيُرسل عندما لا توجد كلمة مفتاحية مطابقة..."
-                  className="mt-1 h-24"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Notifications */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2 space-x-reverse">
-                <Bell className="w-5 h-5 text-orange-600" />
-                <span>الإشعارات</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-3 bg-blue-50 rounded-lg text-center">
-                <Bell className="w-8 h-8 text-blue-600 mx-auto mb-2" />
-                <p className="text-sm text-blue-800">
-                  ستتلقى إشعارات عند وصول رسائل جديدة
-                </p>
-              </div>
-
+        {/* Company Info */}
+        <Card>
+          <CardHeader>
+            <CardTitle>معلومات الشركة</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {company ? (
               <div className="space-y-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span>رسائل جديدة</span>
-                  <Switch defaultChecked />
+                <div>
+                  <p className="text-sm text-gray-600">اسم الشركة</p>
+                  <p className="font-medium">{company.name}</p>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span>فشل في الرد</span>
-                  <Switch defaultChecked />
+                <div>
+                  <p className="text-sm text-gray-600">البريد الإلكتروني</p>
+                  <p className="font-medium">{company.email}</p>
                 </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span>تقارير يومية</span>
-                  <Switch />
+                <div>
+                  <p className="text-sm text-gray-600">معرف الشركة</p>
+                  <p className="font-mono text-xs text-gray-500">{company.id}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-600">عدد الصفحات المربوطة</p>
+                  <p className="font-medium">{connectedPages.length} صفحة</p>
                 </div>
               </div>
-            </CardContent>
-          </Card>
-
-
-
-          {/* Webhook Diagnostics */}
-          <Card className="lg:col-span-3">
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2 space-x-reverse">
-                <Activity className="w-5 h-5 text-orange-600" />
-                <span>تشخيص الـ Webhook</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <WebhookDiagnostics />
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Save Button */}
-        <div className="mt-8 flex justify-end">
-          <Button
-            onClick={handleSaveSettings}
-            className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700"
-          >
-            حفظ الإعدادات
-          </Button>
-        </div>
+            ) : (
+              <p className="text-gray-600">جاري تحميل معلومات الشركة...</p>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

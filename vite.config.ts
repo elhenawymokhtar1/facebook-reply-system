@@ -32,5 +32,13 @@ export default defineConfig(({ mode }) => ({
   },
   build: {
     cssCodeSplit: false,
+    outDir: 'dist',
+    assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+      },
+    },
   },
+  base: './',
 }));

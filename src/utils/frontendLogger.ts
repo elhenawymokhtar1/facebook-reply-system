@@ -12,7 +12,7 @@ interface LogData {
 class FrontendLogger {
   private async sendLog(logData: LogData) {
     try {
-      await fetch('/api/frontend-log', {
+      await fetch('http://localhost:3002/api/frontend-log', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

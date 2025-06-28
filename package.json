@@ -7,12 +7,14 @@
     "dev": "vite",
     "build": "vite build",
     "build:dev": "vite build --mode development",
+    "build:vercel": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "api": "tsx src/api/server.ts",
     "start:all": "concurrently \"npm run dev\" \"npm run api\"",
     "test:webhook": "node test-webhook-diagnostics.js",
-    "diagnose": "node test-webhook-diagnostics.js"
+    "diagnose": "node test-webhook-diagnostics.js",
+    "vercel-build": "npm run build"
   },
   "dependencies": {
     "@hapi/boom": "^10.0.1",
@@ -68,6 +70,7 @@
     "lucide-react": "^0.462.0",
     "multer": "^2.0.1",
     "next-themes": "^0.3.0",
+    "node-fetch": "^3.3.2",
     "qrcode-terminal": "^0.12.0",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",

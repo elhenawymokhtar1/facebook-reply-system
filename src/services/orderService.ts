@@ -221,12 +221,46 @@ export class OrderService {
     }
   }
 
-  // الحصول على جميع الطلبات
+  // الحصول على طلبات الشركة الحالية فقط
   static async getAllOrders(): Promise<OrderData[]> {
     try {
+      // الحصول على بيانات الشركة الحالية
+      const companyData = localStorage.getItem('company');
+      if (!companyData) {
+        console.warn('لا توجد بيانات شركة في localStorage');
+        return [];
+      }
+
+      const company = JSON.parse(companyData);
+      if (!company?.id) {
+        console.warn('معرف الشركة غير موجود');
+        return [];
+      }
+
+      // جلب متاجر الشركة أولاً
+      const { data: stores, error: storesError } = await supabase
+        .from('stores')
+        .select('id')
+        .eq('company_id', company.id)
+        .eq('is_active', true);
+
+      if (storesError) {
+        console.error('Error fetching stores:', storesError);
+        return [];
+      }
+
+      if (!stores || stores.length === 0) {
+        console.log('لا توجد متاجر للشركة');
+        return [];
+      }
+
+      const storeIds = stores.map(store => store.id);
+
+      // جلب الطلبات المرتبطة بمتاجر الشركة فقط
       const { data, error } = await supabase
-        .from('orders')
+        .from('ecommerce_orders')
         .select('*')
+        .in('store_id', storeIds)
         .order('created_at', { ascending: false });
 
       if (error) {
@@ -234,6 +268,7 @@ export class OrderService {
         return [];
       }
 
+      console.log('📦 طلبات الشركة من OrderService:', data?.length || 0);
       return data || [];
     } catch (error) {
       console.error('Error fetching orders:', error);

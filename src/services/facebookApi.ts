@@ -191,6 +191,26 @@ export class FacebookApiService {
           recipientId,
           tokenPrefix: pageAccessToken ? pageAccessToken.substring(0, 10) + '...' : 'null'
         });
+
+        // فحص إذا كان الخطأ متعلق بانتهاء صلاحية Token
+        if (response.status === 400 && errorText.includes('OAuthException')) {
+          console.error('🚨 [TOKEN EXPIRED] Facebook Access Token منتهي الصلاحية!');
+          console.error('🔧 [TOKEN EXPIRED] يرجى تحديث Access Token من Facebook Developers');
+          console.error('🌐 [TOKEN EXPIRED] الرابط: https://developers.facebook.com/tools/explorer/');
+
+          // إشعار في قاعدة البيانات
+          try {
+            await supabase.from('system_alerts').insert({
+              type: 'facebook_token_expired',
+              message: 'Facebook Access Token منتهي الصلاحية - يرجى التحديث',
+              page_id: this.pageId,
+              created_at: new Date().toISOString()
+            });
+          } catch (alertError) {
+            console.error('❌ فشل في إنشاء تنبيه النظام:', alertError);
+          }
+        }
+
         throw new Error(`Facebook API Error: ${response.status} - ${errorText}`);
       }
 
@@ -471,24 +491,49 @@ export class FacebookApiService {
   }
 
   // حفظ إعدادات Facebook في قاعدة البيانات
-  static async saveFacebookSettings(pageId: string, accessToken: string, pageName?: string): Promise<void> {
+  static async saveFacebookSettings(pageId: string, accessToken: string, pageName?: string, companyId?: string): Promise<void> {
     try {
-      const { error } = await supabase
+      console.log('💾 بدء حفظ إعدادات Facebook:', {
+        pageId,
+        pageName,
+        hasToken: !!accessToken,
+        companyId
+      });
+
+      const settingsData: any = {
+        page_id: pageId,
+        access_token: accessToken,
+        page_name: pageName || `صفحة ${pageId}`,
+        updated_at: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        is_active: true,
+        webhook_enabled: true
+      };
+
+      // إضافة company_id إذا تم تمريره
+      if (companyId) {
+        settingsData.company_id = companyId;
+        console.log(`🏢 ربط الصفحة بالشركة: ${companyId}`);
+      }
+
+      console.log('📝 بيانات الحفظ:', settingsData);
+
+      const { data, error } = await supabase
         .from('facebook_settings')
-        .upsert({
-          page_id: pageId,
-          access_token: accessToken,
-          page_name: pageName,
-          updated_at: new Date().toISOString()
-        }, {
+        .upsert(settingsData, {
           onConflict: 'page_id'
-        });
+        })
+        .select();
 
       if (error) {
-        throw error;
+        console.error('❌ خطأ في حفظ إعدادات Facebook:', error);
+        throw new Error(`فشل في حفظ الصفحة: ${error.message}`);
       }
+
+      console.log('✅ تم حفظ إعدادات Facebook بنجاح:', data);
+      return data;
     } catch (error) {
-      console.error('Error saving Facebook settings:', error);
+      console.error('💥 خطأ عام في حفظ إعدادات Facebook:', error);
       throw error;
     }
   }
@@ -513,9 +558,15 @@ export class FacebookApiService {
   }
 
   // الحصول على جميع الصفحات المربوطة من قاعدة البيانات
-  static async getAllConnectedPages(): Promise<any[]> {
+  static async getAllConnectedPages(companyId?: string): Promise<any[]> {
     try {
-      const response = await fetch('/api/facebook/settings');
+      // بناء URL مع company_id إذا تم تمريره
+      let url = '/api/facebook/settings';
+      if (companyId) {
+        url += `?company_id=${encodeURIComponent(companyId)}`;
+      }
+
+      const response = await fetch(url);
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -531,10 +582,12 @@ export class FacebookApiService {
         can_reactivate: !page.access_token && !!page.backup_access_token
       }));
 
+      console.log(`📊 FacebookApi: جلب ${pagesWithStatus.length} صفحة من قاعدة البيانات`);
       return pagesWithStatus;
     } catch (error) {
       console.error('Error fetching connected pages:', error);
-      throw error;
+      // إرجاع مصفوفة فارغة بدلاً من رمي خطأ
+      return [];
     }
   }
 

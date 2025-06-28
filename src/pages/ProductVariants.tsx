@@ -45,16 +45,64 @@ const ProductVariants: React.FC = () => {
   const fetchProducts = async () => {
     try {
       setIsLoading(true);
-      
+
+      // الحصول على الشركة الحالية
+      const companyData = localStorage.getItem('company');
+      if (!companyData) {
+        console.warn('لا توجد شركة محددة');
+        setProducts([]);
+        return;
+      }
+
+      const company = JSON.parse(companyData);
+      console.log('🔍 بيانات الشركة من localStorage:', company);
+
+      // جلب متاجر الشركة أولاً
+      const { data: stores, error: storesError } = await supabase
+        .from('stores')
+        .select('id, name')
+        .eq('company_id', company.id)
+        .eq('is_active', true);
+
+      if (storesError) {
+        console.error('Error fetching stores:', storesError);
+        toast({
+          title: "خطأ",
+          description: "فشل في جلب متاجر الشركة",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      console.log('🏪 المتاجر الموجودة:', stores);
+
+      if (!stores || stores.length === 0) {
+        console.log('لا توجد متاجر للشركة الحالية');
+        setProducts([]);
+        return;
+      }
+
+      const storeIds = stores.map(store => store.id);
+      console.log('🆔 معرفات المتاجر:', storeIds);
+
+      // جلب المنتجات المرتبطة بمتاجر الشركة
       const { data, error } = await supabase
         .from('ecommerce_products')
         .select('*')
+        .in('store_id', storeIds)
         .order('created_at', { ascending: false });
 
       if (error) {
-        throw error;
+        console.error('Error fetching products:', error);
+        toast({
+          title: "خطأ",
+          description: "فشل في جلب المنتجات",
+          variant: "destructive",
+        });
+        return;
       }
 
+      console.log('📦 المنتجات المجلبة:', data?.length || 0);
       setProducts(data || []);
     } catch (error: any) {
       console.error('خطأ في جلب المنتجات:', error);
