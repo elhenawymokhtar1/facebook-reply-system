@@ -26,6 +26,10 @@ export class SimpleGeminiService {
     senderId: string,
     pageId?: string
   ): Promise<boolean> {
+    console.log('🚀🚀🚀 [SIMPLE GEMINI] processMessage CALLED! 🚀🚀🚀');
+    console.log('🔥🔥🔥 [VERSION CHECK] USING UPDATED CODE VERSION 2.0! 🔥🔥🔥');
+    console.log('📝 [SIMPLE GEMINI] Parameters:', { userMessage, conversationId, senderId, pageId });
+
     try {
       // إنشاء مفتاح فريد للمرسل (لضمان الترتيب)
       const senderKey = `${senderId}-${conversationId}`;
@@ -82,11 +86,10 @@ export class SimpleGeminiService {
 
       console.log(`🤖 [SIMPLE GEMINI] Processing: "${userMessage}"`);
 
-      // كتابة لوج مفصل لملف
+      // كتابة لوج مفصل للكونسول فقط (لا يمكن استخدام fs في البراوزر)
       try {
-        const fs = await import('fs');
-        const logEntry = `\n${new Date().toISOString()} - Processing message: "${userMessage}" for conversation: ${conversationId}\n`;
-        fs.appendFileSync('gemini-debug.log', logEntry);
+        const logEntry = `${new Date().toISOString()} - Processing message: "${userMessage}" for conversation: ${conversationId}`;
+        console.log('📝 [DEBUG LOG]', logEntry);
       } catch (err) {
         console.error('Error writing to debug log:', err);
       }
@@ -101,30 +104,36 @@ export class SimpleGeminiService {
         });
       }
 
-      // الحصول على إعدادات Gemini
-      const settings = await this.getGeminiSettings();
+      // الحصول على إعدادات Gemini للشركة المناسبة
+      const settings = await this.getGeminiSettingsForConversation(conversationId);
       if (!settings || !settings.is_enabled) {
-        console.log('❌ Gemini AI is not enabled');
+        console.log('❌ Gemini AI is not enabled for this conversation');
 
-        // كتابة لوج
+        // كتابة لوج للكونسول
         try {
-          const fs = await import('fs');
-          fs.appendFileSync('gemini-debug.log', `${new Date().toISOString()} - Gemini disabled or no settings\n`);
+          console.log('📝 [DEBUG LOG]', `${new Date().toISOString()} - Gemini disabled or no settings for conversation: ${conversationId}`);
         } catch (err) {}
 
         return false;
       }
 
-      // كتابة لوج
+      // كتابة لوج للكونسول
       try {
-        const fs = await import('fs');
-        fs.appendFileSync('gemini-debug.log', `${new Date().toISOString()} - Gemini settings loaded successfully\n`);
+        console.log('📝 [DEBUG LOG]', `${new Date().toISOString()} - Gemini settings loaded successfully`);
       } catch (err) {}
 
       // إنتاج الرد الذكي
+      console.log('🤖 [SIMPLE GEMINI] Calling generateSmartResponse...');
       const response = await this.generateSmartResponse(userMessage, conversationId, settings);
+      console.log('🤖 [SIMPLE GEMINI] generateSmartResponse returned:', response ? 'SUCCESS' : 'NULL');
       if (!response) {
         console.log('❌ Failed to generate response');
+
+        // كتابة لوج مفصل للكونسول
+        try {
+          console.log('📝 [DEBUG LOG]', `${new Date().toISOString()} - FAILED to generate response for: "${userMessage}"`);
+        } catch (err) {}
+
         return false;
       }
 
@@ -151,6 +160,13 @@ export class SimpleGeminiService {
 
     } catch (error) {
       console.error('❌ [SIMPLE GEMINI] Error in processMessageInternal:', error);
+
+      // كتابة لوج مفصل للخطأ في الكونسول
+      try {
+        console.log('📝 [DEBUG LOG]', `${new Date().toISOString()} - ERROR in processMessageInternal: ${error.message}`);
+        console.log('📝 [DEBUG LOG]', `${new Date().toISOString()} - ERROR stack: ${error.stack}`);
+      } catch (err) {}
+
       return false;
     }
   }
@@ -164,36 +180,60 @@ export class SimpleGeminiService {
     settings: any
   ): Promise<string | null> {
     try {
+      console.log('🔧 [GENERATE] Starting generateSmartResponse...');
+
       // بناء البرومت الهجين الذكي
+      console.log('🔧 [GENERATE] Building hybrid prompt...');
       const prompt = await this.buildHybridPrompt(userMessage, conversationId, settings);
+      console.log('🔧 [GENERATE] Prompt built successfully, length:', prompt.length);
 
       // استدعاء Gemini API مع إعدادات محسنة
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${settings.model}:generateContent?key=${settings.api_key}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-              temperature: settings.temperature || 0.5,
-              maxOutputTokens: Math.min(settings.max_tokens || 300, 300), // محدود للكفاءة
-              topP: 0.9,
-              topK: 20
-            }
-          })
+      console.log('🔧 [GENERATE] Calling Gemini API...');
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${settings.model}:generateContent?key=${settings.api_key}`;
+      const requestBody = {
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: settings.temperature || 0.5,
+          maxOutputTokens: Math.min(settings.max_tokens || 300, 300), // محدود للكفاءة
         }
-      );
+      };
+
+      console.log('🔧 [GENERATE] URL:', url);
+      console.log('🔧 [GENERATE] Model:', settings.model);
+      console.log('🔧 [GENERATE] Request body:', JSON.stringify(requestBody, null, 2));
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody)
+      });
+
+      console.log('🔧 [GENERATE] Gemini API response status:', response.status);
 
       if (!response.ok) {
-        throw new Error(`Gemini API Error: ${response.status}`);
+        const errorText = await response.text();
+        console.error('🔧 [GENERATE] Gemini API Error:', response.status, errorText);
+        throw new Error(`Gemini API Error: ${response.status} - ${errorText}`);
       }
 
+      console.log('🔧 [GENERATE] Parsing JSON response...');
       const data = await response.json();
-      return this.extractTextFromResponse(data);
+      console.log('🔧 [GENERATE] JSON parsed successfully');
+
+      const extractedText = this.extractTextFromResponse(data);
+      console.log('🔧 [GENERATE] Extracted text:', extractedText ? 'SUCCESS' : 'NULL');
+
+      return extractedText;
 
     } catch (error) {
       console.error('❌ Error generating smart response:', error);
+
+      // كتابة لوج مفصل للخطأ في الكونسول
+      try {
+        console.log('📝 [DEBUG LOG]', `${new Date().toISOString()} - ERROR in generateSmartResponse: ${error.message}`);
+        console.log('📝 [DEBUG LOG]', `${new Date().toISOString()} - ERROR stack: ${error.stack}`);
+      } catch (err) {}
+
       return null;
     }
   }
@@ -202,12 +242,20 @@ export class SimpleGeminiService {
    * بناء البرومت الهجين الذكي - النظام الجديد (مؤقت مع البرومت الموجود)
    */
   private static async buildHybridPrompt(userMessage: string, conversationId: string, settings: any): Promise<string> {
+    console.log('🔧 [PROMPT] Starting buildHybridPrompt...');
+
     // البرومت الأساسي - استخدام personality_prompt الذي يحتوي على قواعد الصور
     const basePrompt = settings.personality_prompt || settings.prompt_template || 'أنت مساعد ودود لمتجر سوان شوب.';
+    console.log('🔧 [PROMPT] Base prompt set, length:', basePrompt.length);
 
     // فحص إذا كان السؤال متعلق بالمنتجات
+    console.log('🔧 [PROMPT] Getting conversation history...');
     const conversationHistory = await this.getConversationHistory(conversationId, userMessage);
+    console.log('🔧 [PROMPT] Conversation history retrieved, length:', conversationHistory.length);
+
+    console.log('🔧 [PROMPT] Checking if product related...');
     const isProductRelated = this.isProductRelated(userMessage, conversationHistory);
+    console.log('🔧 [PROMPT] Product related check result:', isProductRelated);
 
     let prompt = basePrompt;
 
@@ -224,8 +272,8 @@ export class SimpleGeminiService {
         console.log(`🔍 [HYBRID] Settings object:`, JSON.stringify(settings, null, 2));
       }
 
-      // إضافة المنتجات الفعلية من قاعدة البيانات مع ذكاء في الاختيار
-      const productsInfo = await this.getBasicProductsInfo(userMessage);
+      // إضافة المنتجات الفعلية من قاعدة البيانات مع ذكاء في الاختيار وعزل الشركات
+      const productsInfo = await this.getBasicProductsInfo(userMessage, conversationId);
       prompt += `\n\nالمنتجات المتوفرة حالياً:\n${productsInfo}`;
 
       // إضافة معلومات تفصيلية للمنتجات المطلوبة
@@ -370,15 +418,28 @@ export class SimpleGeminiService {
   }
 
   /**
-   * الحصول على معلومات المنتجات مع دعم المنتج الافتراضي
+   * الحصول على معلومات المنتجات مع دعم المنتج الافتراضي وعزل الشركات
    */
-  private static async getBasicProductsInfo(userMessage?: string): Promise<string> {
+  private static async getBasicProductsInfo(userMessage?: string, conversationId?: string): Promise<string> {
     try {
+      // الحصول على معرف الشركة من المحادثة
+      let companyId = null;
+      if (conversationId) {
+        const { data: conversation } = await supabase
+          .from('conversations')
+          .select('company_id')
+          .eq('id', conversationId)
+          .single();
+
+        companyId = conversation?.company_id;
+        console.log('🏢 [GEMINI] Company ID from conversation:', companyId);
+      }
+
       // أولاً: تحديد إذا كان العميل يقصد المنتج الافتراضي
       const isDefaultProductQuery = this.isDefaultProductQuery(userMessage);
 
       if (isDefaultProductQuery) {
-        return await this.getDefaultProductInfo();
+        return await this.getDefaultProductInfo(companyId);
       }
 
       // ثانياً: تحديد نوع المنتجات المطلوبة حسب رسالة العميل
@@ -404,11 +465,26 @@ export class SimpleGeminiService {
         }
       }
 
-      // بناء الاستعلام
+      // بناء الاستعلام مع عزل الشركات
       let query = supabase
         .from('ecommerce_products')
-        .select('*')
+        .select(`
+          *,
+          stores!inner(
+            id,
+            company_id,
+            name
+          )
+        `)
         .eq('status', 'active');
+
+      // فلترة حسب الشركة إذا كان متوفراً
+      if (companyId) {
+        query = query.eq('stores.company_id', companyId);
+        console.log('🔒 [GEMINI] Filtering products by company:', companyId);
+      } else {
+        console.log('⚠️ [GEMINI] No company filter applied - showing all products');
+      }
 
       if (categoryFilter) {
         query = query.ilike('category', `%${categoryFilter}%`);
@@ -475,16 +551,15 @@ export class SimpleGeminiService {
       console.error('❌ Error fetching products:', error);
     }
 
-    // البيانات الافتراضية إذا لم توجد منتجات
-    return `🛍️ مرحباً بك في متجر سوان شوب!
+    // البيانات الافتراضية إذا لم توجد منتجات - استخدام معلومات الشركة الحقيقية
+    const storeInfo = await this.getStoreInfoForCompany(companyId);
 
-نحن متجر إلكتروني متخصص في:
-- 👠 الأحذية العصرية
-- 👗 الملابس الأنيقة
-- 👜 الحقائب والإكسسوارات
+    return `🛍️ مرحباً بك في ${storeInfo.storeName}!
+
+${storeInfo.welcomeMessage}
 
 🌐 تصفح منتجاتنا على: /shop
-📞 للاستفسار: 01032792040`;
+📞 للاستفسار: اتصل بنا`;
   }
 
   /**
@@ -992,7 +1067,7 @@ export class SimpleGeminiService {
         try {
           console.log(`📸 [GEMINI] إرسال صورة: ${imageUrl.substring(0, 50)}...`);
 
-          const response = await fetch('/api/facebook/send-image', {
+          const response = await fetch('http://localhost:3002/api/facebook/send-image', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -1153,9 +1228,42 @@ export class SimpleGeminiService {
    */
   private static extractTextFromResponse(data: any): string | null {
     try {
-      if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-        return data.candidates[0].content.parts[0].text;
+      console.log('🔧 [EXTRACT] Starting text extraction...');
+
+      // طباعة هيكل الرد للتشخيص
+      console.log('🔧 [EXTRACT] Response keys:', Object.keys(data || {}));
+
+      // المسار الطبيعي
+      if (data?.candidates?.[0]?.content?.parts?.[0]?.text) {
+        const extractedText = data.candidates[0].content.parts[0].text;
+        console.log('🔧 [EXTRACT] ✅ Successfully extracted text via normal path');
+        return extractedText;
       }
+
+      // مسارات بديلة للاستخراج
+      if (data?.candidates?.[0]?.text) {
+        console.log('🔧 [EXTRACT] ✅ Successfully extracted text via alternative path 1');
+        return data.candidates[0].text;
+      }
+
+      if (data?.text) {
+        console.log('🔧 [EXTRACT] ✅ Successfully extracted text via alternative path 2');
+        return data.text;
+      }
+
+      if (data?.response) {
+        console.log('🔧 [EXTRACT] ✅ Successfully extracted text via alternative path 3');
+        return data.response;
+      }
+
+      // إذا كان هناك candidates لكن بدون text
+      if (data?.candidates?.[0]) {
+        console.log('🔧 [EXTRACT] Candidate structure:', JSON.stringify(data.candidates[0], null, 2));
+      }
+
+      console.log('🔧 [EXTRACT] ❌ No text found in any known path');
+      console.log('🔧 [EXTRACT] Full response:', JSON.stringify(data, null, 2));
+
       return null;
     } catch (error) {
       console.error('❌ Error extracting text from response:', error);
@@ -1257,38 +1365,247 @@ export class SimpleGeminiService {
     message: string
   ): Promise<boolean> {
     try {
-      const { FacebookApiService } = await import('./facebookApi');
+      console.log(`📤 [SIMPLE GEMINI] Attempting to send via Facebook for conversation: ${conversationId}`);
 
-      const facebookSettings = await this.getFacebookSettings();
-      if (!facebookSettings) {
-        console.log('⚠️ No Facebook settings available');
+      // الحصول على معلومات المحادثة أولاً
+      const { data: conversation, error: convError } = await supabase
+        .from('conversations')
+        .select('page_id, facebook_page_id, customer_facebook_id, customer_name')
+        .eq('id', conversationId)
+        .single();
+
+      if (convError || !conversation) {
+        console.error('❌ [SIMPLE GEMINI] Error fetching conversation:', convError);
         return false;
       }
 
-      const facebookService = new FacebookApiService(facebookSettings.access_token);
-      await facebookService.sendMessage(facebookSettings.access_token, senderId, message);
+      const pageId = conversation.page_id || conversation.facebook_page_id;
+      console.log(`🔍 [SIMPLE GEMINI] Page ID for conversation: ${pageId}`);
 
-      console.log('✅ Message sent via Facebook');
+      if (!pageId) {
+        console.error('❌ [SIMPLE GEMINI] No page ID found for conversation');
+        return false;
+      }
+
+      // الحصول على إعدادات Facebook للصفحة المحددة
+      const { data: facebookSettings, error: fbError } = await supabase
+        .from('facebook_settings')
+        .select('*')
+        .eq('page_id', pageId)
+        .eq('is_active', true)
+        .single();
+
+      if (fbError || !facebookSettings) {
+        console.error('❌ [SIMPLE GEMINI] Error fetching Facebook settings for page:', pageId, fbError);
+        return false;
+      }
+
+      console.log(`✅ [SIMPLE GEMINI] Facebook settings found for page: ${facebookSettings.page_name}`);
+
+      // إرسال الرسالة عبر Facebook API مباشرة
+      console.log(`📤 [SIMPLE GEMINI] Sending message directly via Facebook API...`);
+
+      const messagePayload = {
+        recipient: { id: senderId },
+        message: { text: message }
+      };
+
+      const response = await fetch(`https://graph.facebook.com/v21.0/me/messages?access_token=${facebookSettings.access_token}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(messagePayload)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ [SIMPLE GEMINI] Facebook API Error:', {
+          status: response.status,
+          statusText: response.statusText,
+          body: errorText
+        });
+
+        // فحص إذا كان الخطأ متعلق بانتهاء النافذة الزمنية (24 ساعة)
+        if (response.status === 400 && errorText.includes('2018001')) {
+          console.log('⚠️ [SIMPLE GEMINI] 24-hour messaging window expired');
+          console.log('💡 [SIMPLE GEMINI] Customer needs to send a message first to restart conversation');
+
+          // حفظ الرسالة في قاعدة البيانات فقط
+          await this.saveMessageToDatabase(conversationId, senderId, message, 'bot', true);
+          console.log('💾 [SIMPLE GEMINI] Message saved to database only (24h window expired)');
+
+          // إنشاء تنبيه في النظام
+          await this.createSystemAlert(conversationId, '24h_window_expired',
+            'انتهت النافذة الزمنية للرد - العميل يحتاج لإرسال رسالة جديدة');
+
+          return true; // نعتبرها نجحت لأنها محفوظة في قاعدة البيانات
+        }
+
+        return false;
+      }
+
+      const result = await response.json();
+
+      if (result.error) {
+        console.error('❌ [SIMPLE GEMINI] Facebook API Response Error:', result.error);
+        return false;
+      }
+
+      console.log('✅ [SIMPLE GEMINI] Message sent via Facebook successfully:', result);
+
+      // تحديث الرسالة في قاعدة البيانات بمعرف Facebook
+      if (result && result.message_id) {
+        console.log(`📝 [SIMPLE GEMINI] Updating message with Facebook ID: ${result.message_id}`);
+
+        // البحث عن الرسالة الأخيرة للمحادثة وتحديثها
+        const { error: updateError } = await supabase
+          .from('messages')
+          .update({
+            facebook_message_id: result.message_id
+          })
+          .eq('conversation_id', conversationId)
+          .eq('sender_type', 'bot')
+          .eq('content', message)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (updateError) {
+          console.error('❌ [SIMPLE GEMINI] Error updating message with Facebook ID:', updateError);
+        } else {
+          console.log('✅ [SIMPLE GEMINI] Message updated with Facebook ID successfully');
+        }
+      }
+
       return true;
 
     } catch (error) {
-      console.error('❌ Error sending via Facebook:', error);
+      console.error('❌ [SIMPLE GEMINI] Error sending via Facebook:', error);
       return false;
     }
   }
 
   /**
-   * الحصول على إعدادات Gemini
+   * حفظ الرسالة في قاعدة البيانات فقط (عند فشل الإرسال)
+   */
+  private static async saveMessageToDatabase(
+    conversationId: string,
+    senderId: string,
+    message: string,
+    senderType: 'bot' | 'customer' | 'admin',
+    isAutoReply: boolean = false
+  ): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('messages')
+        .insert({
+          conversation_id: conversationId,
+          content: message,
+          sender_type: senderType,
+          is_auto_reply: isAutoReply,
+          is_ai_generated: senderType === 'bot',
+          facebook_message_id: null, // لا يوجد معرف Facebook لأن الرسالة لم تُرسل
+          is_read: false,
+          created_at: new Date().toISOString()
+        });
+
+      if (error) {
+        console.error('❌ [SIMPLE GEMINI] Error saving message to database:', error);
+        return false;
+      }
+
+      console.log('✅ [SIMPLE GEMINI] Message saved to database successfully');
+      return true;
+    } catch (error) {
+      console.error('❌ [SIMPLE GEMINI] Error in saveMessageToDatabase:', error);
+      return false;
+    }
+  }
+
+  /**
+   * إنشاء تنبيه في النظام
+   */
+  private static async createSystemAlert(
+    conversationId: string,
+    alertType: string,
+    message: string
+  ): Promise<void> {
+    try {
+      const { error } = await supabase
+        .from('system_alerts')
+        .insert({
+          conversation_id: conversationId,
+          type: alertType,
+          message: message,
+          is_read: false,
+          created_at: new Date().toISOString()
+        });
+
+      if (error) {
+        console.error('❌ [SIMPLE GEMINI] Error creating system alert:', error);
+      } else {
+        console.log('✅ [SIMPLE GEMINI] System alert created successfully');
+      }
+    } catch (error) {
+      console.error('❌ [SIMPLE GEMINI] Error in createSystemAlert:', error);
+    }
+  }
+
+  /**
+   * الحصول على إعدادات Gemini للمحادثة المحددة
+   */
+  private static async getGeminiSettingsForConversation(conversationId: string): Promise<any> {
+    try {
+      // الحصول على معلومات المحادثة أولاً
+      const { data: conversation, error: convError } = await supabase
+        .from('conversations')
+        .select('company_id')
+        .eq('id', conversationId)
+        .single();
+
+      if (convError || !conversation) {
+        console.log('⚠️ Could not get conversation company, using general settings');
+        return await this.getGeminiSettings();
+      }
+
+      // البحث عن إعدادات Gemini للشركة المحددة
+      const { data: companySettings, error: companyError } = await supabase
+        .from('gemini_settings')
+        .select('*')
+        .eq('company_id', conversation.company_id)
+        .eq('is_enabled', true)
+        .limit(1);
+
+      if (companyError || !companySettings || companySettings.length === 0) {
+        console.log('⚠️ No company-specific Gemini settings, using general settings');
+        return await this.getGeminiSettings();
+      }
+
+      console.log(`✅ Found Gemini settings for company: ${conversation.company_id}`);
+      return companySettings[0];
+    } catch (error) {
+      console.error('❌ Error getting Gemini settings for conversation:', error);
+      return await this.getGeminiSettings();
+    }
+  }
+
+  /**
+   * الحصول على إعدادات Gemini العامة
    */
   private static async getGeminiSettings(): Promise<any> {
     try {
-      const { data: settings } = await supabase
+      const { data: settings, error } = await supabase
         .from('gemini_settings')
         .select('*')
-        .limit(1)
-        .single();
+        .eq('is_enabled', true)
+        .limit(1);
 
-      return settings;
+      if (error) {
+        console.error('❌ Error getting Gemini settings:', error);
+        return null;
+      }
+
+      return settings && settings.length > 0 ? settings[0] : null;
     } catch (error) {
       console.error('❌ Error getting Gemini settings:', error);
       return null;
@@ -1314,7 +1631,7 @@ export class SimpleGeminiService {
   }
 
   /**
-   * إنشاء طلب مباشر من تفاصيل النص
+   * إنشاء طلب مباشر من تفاصيل النص - محدث للعمل مع جميع الشركات
    */
   private static async createDirectOrder(orderDetails: string, conversationId: string): Promise<any> {
     try {
@@ -1334,8 +1651,17 @@ export class SimpleGeminiService {
       // جلب معلومات العميل من المحادثة (كبديل)
       const customerInfo = await this.getCustomerInfo(conversationId);
 
-      // البحث عن المنتج في قاعدة البيانات
-      const product = await this.findProductByName(orderInfo.productName);
+      // الحصول على معرف الشركة من المحادثة
+      const { data: conversationData } = await supabase
+        .from('conversations')
+        .select('company_id')
+        .eq('id', conversationId)
+        .single();
+
+      const companyId = conversationData?.company_id;
+
+      // البحث عن المنتج في قاعدة البيانات مع عزل الشركات
+      const product = await this.findProductByName(orderInfo.productName, companyId);
 
       if (!product) {
         return { success: false, error: 'Product not found' };
@@ -1364,6 +1690,7 @@ export class SimpleGeminiService {
         .from('ecommerce_orders')
         .insert({
           store_id: storeId,
+          company_id: companyId, // إضافة معرف الشركة
           order_number: orderNumber,
           customer_name: customerInfo.name || orderInfo.customerName || 'عميل جديد',
           customer_phone: customerInfo.phone || orderInfo.customerPhone || '',
@@ -1387,6 +1714,13 @@ export class SimpleGeminiService {
 
       if (orderError) {
         console.error('❌ Error creating order:', orderError);
+
+        // إذا فشل إنشاء الأوردر بسبب RLS، استخدم الطريقة البديلة
+        if (orderError.code === '42501') {
+          console.log('🔄 محاولة إنشاء الأوردر بالطريقة البديلة...');
+          return await this.createOrderFallback(orderInfo, conversationId, product, quantity, unitPrice, total, subtotal, shippingCost, orderNumber);
+        }
+
         return { success: false, error: orderError.message };
       }
 
@@ -1433,6 +1767,85 @@ export class SimpleGeminiService {
 
     } catch (error) {
       console.error('❌ Error in createDirectOrder:', error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * دالة مساعدة لإنشاء الأوردر عند فشل الطريقة الأساسية
+   */
+  private static async createOrderFallback(
+    orderInfo: any,
+    conversationId: string,
+    product: any,
+    quantity: number,
+    unitPrice: number,
+    total: number,
+    subtotal: number,
+    shippingCost: number,
+    orderNumber: string
+  ): Promise<any> {
+    try {
+      console.log('🔄 [FALLBACK] إنشاء أوردر بالطريقة البديلة...');
+
+      // الحصول على معرف الشركة من المحادثة
+      const { data: conversation } = await supabase
+        .from('conversations')
+        .select('company_id')
+        .eq('id', conversationId)
+        .single();
+
+      if (!conversation?.company_id) {
+        console.error('❌ [FALLBACK] لا يمكن العثور على معرف الشركة');
+        return { success: false, error: 'Company ID not found' };
+      }
+
+      // إنشاء الأوردر في جدول orders (النظام القديم) كـ backup
+      const orderData = {
+        order_number: orderNumber,
+        conversation_id: conversationId,
+        customer_name: orderInfo.customerName || 'عميل جديد',
+        customer_phone: orderInfo.customerPhone || '',
+        customer_address: orderInfo.customerAddress || '',
+        product_name: product.name,
+        product_size: orderInfo.size || '',
+        product_color: orderInfo.color || '',
+        quantity: quantity,
+        unit_price: unitPrice,
+        shipping_cost: shippingCost,
+        total_price: total,
+        status: 'pending',
+        notes: 'طلب من الذكاء الاصطناعي - طريقة بديلة',
+        company_id: conversation.company_id
+      };
+
+      // محاولة إنشاء الأوردر باستخدام API مباشرة
+      const response = await fetch('/api/create-order-direct', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(orderData)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ [FALLBACK] تم إنشاء الأوردر بنجاح');
+        return {
+          success: true,
+          orderNumber: orderNumber,
+          orderId: result.id,
+          total: total,
+          product: product.name,
+          quantity: quantity
+        };
+      } else {
+        console.error('❌ [FALLBACK] فشل في إنشاء الأوردر عبر API');
+        return { success: false, error: 'Fallback method failed' };
+      }
+
+    } catch (error) {
+      console.error('❌ [FALLBACK] خطأ في الطريقة البديلة:', error);
       return { success: false, error: error.message };
     }
   }
@@ -1510,28 +1923,55 @@ export class SimpleGeminiService {
   }
 
   /**
-   * البحث عن منتج بالاسم
+   * البحث عن منتج بالاسم مع عزل الشركات
    */
-  private static async findProductByName(productName: string): Promise<any> {
+  private static async findProductByName(productName: string, companyId?: string): Promise<any> {
     try {
-      // البحث بالاسم الدقيق أولاً
-      let { data: product } = await supabase
+      // البحث بالاسم الدقيق أولاً مع عزل الشركات
+      let query = supabase
         .from('ecommerce_products')
-        .select('*')
+        .select(`
+          *,
+          stores!inner(
+            id,
+            company_id,
+            name
+          )
+        `)
         .eq('status', 'active')
         .ilike('name', `%${productName}%`)
-        .limit(1)
-        .single();
+        .limit(1);
 
-      // إذا لم يجد، ابحث في الوصف
+      // فلترة حسب الشركة إذا كان متوفراً
+      if (companyId) {
+        query = query.eq('stores.company_id', companyId);
+        console.log('🔒 [GEMINI] Filtering product search by company:', companyId);
+      }
+
+      let { data: product } = await query.single();
+
+      // إذا لم يجد، ابحث في الوصف مع عزل الشركات
       if (!product) {
-        const { data: products } = await supabase
+        let descQuery = supabase
           .from('ecommerce_products')
-          .select('*')
+          .select(`
+            *,
+            stores!inner(
+              id,
+              company_id,
+              name
+            )
+          `)
           .eq('status', 'active')
           .or(`name.ilike.%${productName}%,short_description.ilike.%${productName}%`)
           .limit(1);
 
+        // فلترة حسب الشركة إذا كان متوفراً
+        if (companyId) {
+          descQuery = descQuery.eq('stores.company_id', companyId);
+        }
+
+        const { data: products } = await descQuery;
         product = products && products.length > 0 ? products[0] : null;
       }
 
@@ -1638,79 +2078,129 @@ export class SimpleGeminiService {
   }
 
   /**
-   * الحصول على معلومات المنتج الافتراضي
+   * الحصول على معلومات المنتج الافتراضي مع عزل الشركات
    */
-  private static async getDefaultProductInfo(): Promise<string> {
+  private static async getDefaultProductInfo(companyId?: string): Promise<string> {
     try {
-      // البحث عن المنتج الافتراضي في قاعدة البيانات
-      const { data: defaultProduct } = await supabase
-        .from('ecommerce_products')
-        .select('*')
-        .ilike('name', '%حذاء كاجوال جلد طبيعي%')
-        .eq('status', 'active')
+      // استخدام المنتجات الحقيقية للشركة بدلاً من البحث عن منتج افتراضي ثابت
+      const actualProducts = await this.getActualCompanyProducts(companyId);
+
+      if (actualProducts) {
+        return actualProducts;
+      }
+
+      // إذا لم توجد منتجات، استخدم رسالة عامة
+      const storeInfo = await this.getStoreInfoForCompany(companyId);
+      return `🛍️ مرحباً بك في ${storeInfo.storeName}!
+
+نحن نعمل على تحديث قائمة منتجاتنا.
+يرجى التواصل معنا مباشرة للاستفسار عن المنتجات المتوفرة.
+
+📞 للاستفسار: اتصل بنا`;
+    } catch (error) {
+      console.error('❌ Error getting default product info:', error);
+      const storeInfo = await this.getStoreInfoForCompany(companyId);
+      return `🛍️ مرحباً بك في ${storeInfo.storeName}!
+
+نحن نعمل على تحديث قائمة منتجاتنا.
+يرجى التواصل معنا مباشرة للاستفسار عن المنتجات المتوفرة.
+
+📞 للاستفسار: اتصل بنا`;
+    }
+  }
+
+  /**
+   * الحصول على معلومات المتجر للشركة
+   */
+  private static async getStoreInfoForCompany(companyId?: string): Promise<{storeName: string, welcomeMessage: string}> {
+    try {
+      if (!companyId) {
+        return {
+          storeName: 'متجرنا الإلكتروني',
+          welcomeMessage: 'نحن متجر إلكتروني متخصص في تقديم أفضل المنتجات.'
+        };
+      }
+
+      // جلب معلومات المتجر من قاعدة البيانات
+      const { data: store, error: storeError } = await supabase
+        .from('stores')
+        .select('name')
+        .eq('company_id', companyId)
         .single();
 
-      if (defaultProduct) {
-        // عرض المنتج من قاعدة البيانات
-        const price = defaultProduct.sale_price || defaultProduct.price;
-        const originalPrice = defaultProduct.sale_price ?
-          ` (بدلاً من ${defaultProduct.price} ج)` : '';
-        const discount = defaultProduct.sale_price ?
-          Math.round(((defaultProduct.price - defaultProduct.sale_price) / defaultProduct.price) * 100) : 0;
-
-        let info = `🌟 **${defaultProduct.name}**\n\n`;
-        info += `💰 السعر: ${price} ج${originalPrice}\n`;
-        if (discount > 0) {
-          info += `🎯 خصم ${discount}% لفترة محدودة!\n`;
-        }
-        info += `📦 ${defaultProduct.stock_quantity > 0 ?
-          `متوفر (${defaultProduct.stock_quantity} قطعة)` : 'نفد المخزون'}\n`;
-
-        // استخراج الألوان والمقاسات من الوصف
-        const description = defaultProduct.description || '';
-        const colorsMatch = description.match(/متوفر بالألوان:\s*([^📏\n]+)/);
-        const sizesMatch = description.match(/متوفر بالمقاسات:\s*([^\n]+)/);
-
-        if (colorsMatch) {
-          const colors = colorsMatch[1].split(',').map(c => c.trim()).filter(c => c);
-          info += `🎨 الألوان المتاحة: ${colors.join(', ')}\n`;
-          console.log(`✅ [DEFAULT PRODUCT] استخرجت ${colors.length} لون: ${colors.join(', ')}`);
-        }
-
-        if (sizesMatch) {
-          const sizes = sizesMatch[1].split(',').map(s => s.trim()).filter(s => s);
-          info += `📏 المقاسات المتاحة: ${sizes.join(', ')}\n`;
-          console.log(`✅ [DEFAULT PRODUCT] استخرجت ${sizes.length} مقاس: ${sizes.join(', ')}`);
-        }
-
-        if (defaultProduct.short_description) {
-          info += `\n📝 ${defaultProduct.short_description}\n`;
-        }
-
-        info += `\n🛒 للطلب: اطلب الآن وسنحتاج اسمك ورقم هاتفك والعنوان والمقاس واللون\n`;
-        info += `📞 أو تواصل معنا: 01032792040`;
-
-        return info;
+      if (storeError || !store) {
+        return {
+          storeName: 'متجرنا الإلكتروني',
+          welcomeMessage: 'نحن متجر إلكتروني متخصص في تقديم أفضل المنتجات.'
+        };
       }
+
+      return {
+        storeName: store.name,
+        welcomeMessage: `نحن ${store.name} - متجر إلكتروني متخصص في تقديم أفضل المنتجات لعملائنا الكرام.`
+      };
     } catch (error) {
-      console.error('❌ Error fetching default product:', error);
+      console.error('❌ Error getting store info:', error);
+      return {
+        storeName: 'متجرنا الإلكتروني',
+        welcomeMessage: 'نحن متجر إلكتروني متخصص في تقديم أفضل المنتجات.'
+      };
     }
+  }
 
-    // إذا لم يوجد في قاعدة البيانات، استخدم البيانات من البرومت
-    return `🌟 **حذاء كاجوال جلد طبيعي**
+  /**
+   * الحصول على المنتجات الحقيقية للشركة
+   */
+  private static async getActualCompanyProducts(companyId?: string): Promise<string | null> {
+    try {
+      if (!companyId) {
+        return null;
+      }
 
-💰 السعر: 250 ج (بدلاً من 350 ج)
-🎯 خصم 30% لفترة محدودة!
-📦 متوفر (50 قطعة)
-🎨 الألوان: أسود، بني، كحلي
-📏 المقاسات: 38-44
+      // جلب المنتجات الحقيقية من قاعدة البيانات
+      const { data: products, error: productsError } = await supabase
+        .from('ecommerce_products')
+        .select(`
+          *,
+          stores!inner(
+            id,
+            company_id,
+            name
+          )
+        `)
+        .eq('stores.company_id', companyId)
+        .eq('status', 'active')
+        .limit(5);
 
-✨ المميزات:
-- جلد طبيعي 100%
-- مريح للاستخدام اليومي
-- تصميم عصري وأنيق
+      if (productsError || !products || products.length === 0) {
+        return null;
+      }
 
-🛒 للطلب: اطلب الآن وسنحتاج اسمك ورقم هاتفك والعنوان والمقاس واللون
-📞 أو تواصل معنا: 01032792040`;
+      const storeInfo = await this.getStoreInfoForCompany(companyId);
+
+      let info = `🛍️ منتجات ${storeInfo.storeName} المتوفرة:\n\n`;
+
+      products.forEach((product, index) => {
+        const price = product.sale_price || product.price;
+        const originalPrice = product.sale_price ? ` (بدلاً من ${product.price} ج)` : '';
+        const stock = product.stock_quantity > 0 ? `✅ متوفر` : '❌ نفد المخزون';
+        const featured = product.featured ? '⭐ ' : '';
+
+        info += `${index + 1}. ${featured}${product.name}\n`;
+        info += `   💰 ${price} ج${originalPrice}\n`;
+        info += `   📦 ${stock}\n`;
+        if (product.description) {
+          info += `   📝 ${product.description}\n`;
+        }
+        info += `\n`;
+      });
+
+      info += `🛒 للطلب: اذكر اسم المنتج وسنساعدك في إكمال الطلب!`;
+
+      return info;
+    } catch (error) {
+      console.error('❌ Error getting actual company products:', error);
+      return null;
+    }
   }
 }

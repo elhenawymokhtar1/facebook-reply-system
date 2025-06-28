@@ -105,14 +105,17 @@ const CompanyRegister: React.FC = () => {
         country: formData.country
       });
 
-      if (result.success) {
+      if (result.success && result.company) {
+        // حفظ بيانات الشركة الصحيحة في localStorage
+        localStorage.setItem('company', JSON.stringify(result.company));
+
         toast({
           title: "تم التسجيل بنجاح! 🎉",
           description: "مرحباً بك في نظام الرد التلقائي. تم تفعيل الخطة المجانية لك.",
         });
-        
-        // الانتقال لصفحة تسجيل الدخول أو لوحة التحكم
-        navigate('/company-login');
+
+        // الانتقال مباشرة للوحة التحكم
+        navigate('/company-dashboard');
       } else {
         toast({
           title: "خطأ في التسجيل",

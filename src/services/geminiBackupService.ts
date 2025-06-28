@@ -1,12 +1,10 @@
-import fs from 'fs';
-import path from 'path';
 import { supabase } from "@/integrations/supabase/client";
 import { GeminiSettings } from './geminiAi';
 
 export class GeminiBackupService {
-  private static backupFilePath = path.join(process.cwd(), 'src/config/gemini-backup.json');
+  // تم إزالة fs module لتوافق البراوزر - استخدام localStorage بدلاً من ذلك
 
-  // حفظ الإعدادات في الملف المحلي
+  // حفظ الإعدادات في localStorage (متوافق مع البراوزر)
   static async saveToBackup(settings: GeminiSettings): Promise<void> {
     try {
       const backupData = {
@@ -15,33 +13,38 @@ export class GeminiBackupService {
         auto_restore: true
       };
 
-      // إنشاء المجلد إذا لم يكن موجود
-      const configDir = path.dirname(this.backupFilePath);
-      if (!fs.existsSync(configDir)) {
-        fs.mkdirSync(configDir, { recursive: true });
+      // حفظ في localStorage بدلاً من ملف
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gemini-backup', JSON.stringify(backupData));
+        console.log('✅ Gemini settings backed up to localStorage');
+      } else {
+        console.log('⚠️ localStorage not available (server-side)');
       }
-
-      fs.writeFileSync(this.backupFilePath, JSON.stringify(backupData, null, 2));
-      console.log('✅ Gemini settings backed up successfully');
     } catch (error) {
       console.error('❌ Error backing up Gemini settings:', error);
     }
   }
 
-  // استرجاع الإعدادات من الملف المحلي
+  // استرجاع الإعدادات من localStorage
   static async loadFromBackup(): Promise<GeminiSettings | null> {
     try {
-      if (!fs.existsSync(this.backupFilePath)) {
-        console.log('⚠️ No backup file found');
+      if (typeof window === 'undefined') {
+        console.log('⚠️ localStorage not available (server-side)');
         return null;
       }
 
-      const backupData = JSON.parse(fs.readFileSync(this.backupFilePath, 'utf8'));
-      console.log('✅ Gemini settings loaded from backup');
-      
+      const backupData = localStorage.getItem('gemini-backup');
+      if (!backupData) {
+        console.log('⚠️ No backup data found in localStorage');
+        return null;
+      }
+
+      const parsedData = JSON.parse(backupData);
+      console.log('✅ Gemini settings loaded from localStorage backup');
+
       return {
-        api_key: backupData.api_key,
-        model: backupData.model,
+        api_key: parsedData.api_key,
+        model: parsedData.model,
         is_enabled: backupData.is_enabled,
         max_tokens: backupData.max_tokens,
         temperature: backupData.temperature,
