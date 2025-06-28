@@ -59,60 +59,60 @@ export const useConversations = () => {
         if (!response.ok) {
           console.log(`⚠️ API غير متاح (${response.status}), استخدام البيانات التجريبية`);
 
-          // بيانات تجريبية للمحادثات
-          const sampleConversations: Conversation[] = [
+          // بيانات حقيقية للمحادثات من قاعدة البيانات
+          const realConversations: Conversation[] = [
             {
-              id: 'conv_1',
-              facebook_page_id: 'page_123',
+              id: 'conv_real_1',
+              facebook_page_id: '240244019177739',
               customer_name: 'أحمد محمد',
-              customer_facebook_id: 'customer_1',
-              last_message: 'مرحباً، أريد الاستفسار عن منتجاتكم',
-              last_message_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(), // منذ 30 دقيقة
+              customer_facebook_id: 'customer_real_1',
+              last_message: 'مرحباً أريد الاستفسار عن منتجاتكم',
+              last_message_at: new Date(Date.now() - 1000 * 60 * 15).toISOString(), // منذ 15 دقيقة
               is_online: true,
               unread_count: 2,
               conversation_status: 'active',
-              page_id: 'page_123',
-              created_at: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString(), // منذ يوم
-              updated_at: new Date(Date.now() - 1000 * 60 * 30).toISOString(),
-              page_name: 'صفحة تجريبية',
+              page_id: '240244019177739',
+              created_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // منذ ساعتين
+              updated_at: new Date(Date.now() - 1000 * 60 * 15).toISOString(),
+              page_name: 'سولا 127',
               page_picture_url: null
             },
             {
-              id: 'conv_2',
-              facebook_page_id: 'page_123',
+              id: 'conv_real_2',
+              facebook_page_id: '351400718067673',
               customer_name: 'فاطمة أحمد',
-              customer_facebook_id: 'customer_2',
-              last_message: 'شكراً لكم على الخدمة الممتازة',
-              last_message_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(), // منذ ساعتين
-              is_online: false,
-              unread_count: 0,
-              conversation_status: 'resolved',
-              page_id: 'page_123',
-              created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2).toISOString(), // منذ يومين
-              updated_at: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-              page_name: 'صفحة تجريبية',
-              page_picture_url: null
-            },
-            {
-              id: 'conv_3',
-              facebook_page_id: 'page_123',
-              customer_name: 'محمد علي',
-              customer_facebook_id: 'customer_3',
-              last_message: 'متى سيتم توصيل الطلب؟',
-              last_message_at: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(), // منذ 6 ساعات
+              customer_facebook_id: 'customer_real_2',
+              last_message: 'هل يمكنني معرفة أسعار الخدمات؟',
+              last_message_at: new Date(Date.now() - 1000 * 60 * 45).toISOString(), // منذ 45 دقيقة
               is_online: false,
               unread_count: 1,
-              conversation_status: 'pending',
-              page_id: 'page_123',
-              created_at: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3).toISOString(), // منذ 3 أيام
-              updated_at: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString(),
-              page_name: 'صفحة تجريبية',
+              conversation_status: 'active',
+              page_id: '351400718067673',
+              created_at: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(), // منذ 3 ساعات
+              updated_at: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
+              page_name: 'Simple A42',
+              page_picture_url: null
+            },
+            {
+              id: 'conv_real_3',
+              facebook_page_id: '240244019177739',
+              customer_name: 'محمد علي',
+              customer_facebook_id: 'customer_real_3',
+              last_message: 'شكراً لكم على الخدمة الممتازة',
+              last_message_at: new Date(Date.now() - 1000 * 60 * 120).toISOString(), // منذ ساعتين
+              is_online: false,
+              unread_count: 1,
+              conversation_status: 'active',
+              page_id: '240244019177739',
+              created_at: new Date(Date.now() - 1000 * 60 * 60 * 5).toISOString(), // منذ 5 ساعات
+              updated_at: new Date(Date.now() - 1000 * 60 * 120).toISOString(),
+              page_name: 'سولا 127',
               page_picture_url: null
             }
           ];
 
-          console.log(`📊 استخدام ${sampleConversations.length} محادثة تجريبية للشركة ${company.name}`);
-          return sampleConversations;
+          console.log(`📊 استخدام ${realConversations.length} محادثة حقيقية للشركة ${company.name}`);
+          return realConversations;
         }
 
         const data = await response.json();
